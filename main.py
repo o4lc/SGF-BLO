@@ -62,7 +62,7 @@ def solveLL(x):
             if torch.linalg.norm(dgdy, 2) < 1e-3:
                 break
 
-    print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0)
+    print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0, '\n')
     return y, dgdy
 
 # Define the system of ODEs
@@ -120,7 +120,7 @@ def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
     lossF, lossG, lossF2 = [], [], []
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
-
+    x.requires_grad = False
     for k in tqdm(range(K)):
         # Calculate derivatives for current x and y
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -132,30 +132,26 @@ def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
 
         # Update x
-        x = x - alpha / (1+k)**(2/5) * (dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
+        with torch.no_grad():
+            x = x - alpha / (1+k)**(2/5) * (dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
 
         # Compute and store losses (no gradient tracking)
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
         if not toy_example:
-            W = y
-            train_accuracy.append(calculate_accuracy(A_tr, B_tr, W.reshape(dimY, -1)))
-            train_loss.append(calculate_loss(A_tr, B_tr, W.reshape(dimY, -1)))
-            val_accuracy.append(calculate_accuracy(A_val, B_val, W.reshape(dimY, -1)))
-            val_loss.append(calculate_loss(A_val, B_val, W.reshape(dimY, -1)))
-            test_accuracy.append(calculate_accuracy(A_test, B_test, W.reshape(dimY, -1)))
-            test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)))
+            train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                    train_loss, val_loss, test_loss)
 
     # Convert lists of losses to tensors for easy analysis
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
 def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss):
-    train_accuracy.append(calculate_accuracy(A_tr, B_tr, W.reshape(dimY, -1)))
-    train_loss.append(calculate_loss(A_tr, B_tr, W.reshape(dimY, -1)))
-    val_accuracy.append(calculate_accuracy(A_val, B_val, W.reshape(dimY, -1)))
-    val_loss.append(calculate_loss(A_val, B_val, W.reshape(dimY, -1)))
-    test_accuracy.append(calculate_accuracy(A_test, B_test, W.reshape(dimY, -1)))
-    test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)))
+    train_accuracy.append(calculate_accuracy(A_tr, B_tr, W.reshape(dimY, -1)).reshape(-1))
+    train_loss.append(calculate_loss(A_tr, B_tr, W.reshape(dimY, -1)).reshape(-1))
+    val_accuracy.append(calculate_accuracy(A_val, B_val, W.reshape(dimY, -1)).reshape(-1))
+    val_loss.append(calculate_loss(A_val, B_val, W.reshape(dimY, -1)).reshape(-1))
+    test_accuracy.append(calculate_accuracy(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
+    test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
     return train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss
 
 def AITBio(x, y0, alpha=0.01, beta=0.01, K=10, D=10):
@@ -165,6 +161,7 @@ def AITBio(x, y0, alpha=0.01, beta=0.01, K=10, D=10):
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
     nu = torch.zeros_like(y0)
+    x.requires_grad = False
     for k in tqdm(range(K)):
         for t in range(D):
             dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -177,11 +174,12 @@ def AITBio(x, y0, alpha=0.01, beta=0.01, K=10, D=10):
                                                                                                         train_loss, val_loss, test_loss)
 
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
-        if False:
-            nu =  dgdyy.inverse() @ dfdy
-        else:
-            nu = conjugate_gradient(dgdyy.detach().numpy(), dfdy.detach().numpy(), nu.detach().numpy(), 10)
-        x = x - beta * (dfdx - dgdyx.T @ nu)
+        with torch.no_grad():
+            if False:
+                nu =  dgdyy.inverse() @ dfdy
+            else:
+                nu = conjugate_gradient(dgdyy.detach().numpy(), dfdy.detach().numpy(), nu.detach().numpy(), 10)
+            x = x - beta * (dfdx - dgdyx.T @ nu)
         
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
@@ -205,7 +203,13 @@ if __name__ == '__main__':
     toy_example = args.toy_example
     torch.manual_seed(0); np.random.seed(0)
     # 
-    plt.rcParams.update({'font.size': 13})
+    plt.rcParams.update({
+    'font.size': 16,          # General font size
+    'xtick.labelsize': 16,    # Tick label size for x-axis
+    'ytick.labelsize': 16,    # Tick label size for y-axis
+    'axes.labelsize': 16      # Font size for axis labels
+})
+
 
     scenarios = scenario_setup(args.senarioID)
 
@@ -228,10 +232,12 @@ if __name__ == '__main__':
         t = torch.linspace(0, 10, 1000)
     else:
         x = torch.zeros((sizeX, 1), requires_grad=True, dtype=torch.float32)
-        t = torch.linspace(0, 1000, 1000)
+        t = torch.linspace(0, 500, 500)
 
-    # y0, dgdy = solveLL(x)
-    y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
+    if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
+        y0, dgdy = solveLL(x)
+    else:
+        y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
 
     for (method, alpha, epsilon, p) in scenarios:
         print('-- Method:', method, 'Alpha:', alpha, 'Epsilon:', epsilon)
@@ -243,23 +249,22 @@ if __name__ == '__main__':
             initial_conditions = torch.cat((x, y0), 0)
             progress_bar = tqdm(total= 4 * len(t))
             solution = torchdiffeq.odeint(system, initial_conditions, t, method='rk4')
+            progress_bar.close()
             tt = t
             lossF, lossG, lossF2 = [], [], []
             train_accuracy, val_accuracy, test_accuracy = [], [], []
             train_loss, val_loss, test_loss = [], [], []
             for i in range(len(solution)):
-                lossF.append(f(solution[i, :sizeX], solution[i, sizeX:]).detach().numpy().reshape(-1))
                 dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(solution[i, :sizeX], solution[i, sizeX:])
-                lossG.append(torch.linalg.norm(dgdy).detach().numpy())
-                lossF2.append(torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy).detach().numpy())
-                if not toy_example:
-                    train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss =\
-                          add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss)
+                with torch.no_grad():
+                    lossF.append(f(solution[i, :sizeX], solution[i, sizeX:]).detach().numpy().reshape(-1))
+                    lossG.append(torch.linalg.norm(dgdy).detach().numpy())
+                    lossF2.append(torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy).detach().numpy())
+                    if not toy_example:
+                        train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss =\
+                            add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss)
                                                                       
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
-        # elif method == 'AIDBio':
-        #     lossF, lossG, lossF2, acc, loss = AIDBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
-        #     tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'AITBio':
             lossF, lossG, lossF2, acc, loss = AITBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
@@ -297,40 +302,45 @@ if __name__ == '__main__':
             if not toy_example: 
                 # Plotting accuracy
                 print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item())
-                ax3.plot(tt, acc[2], label=(method + strLabel))
-                ax3.set_xlabel('time', fontsize=14)
-                ax3.set_ylabel('Test Accuracy', fontsize=14)
+                ax3.plot(tt, acc[1], label=(method + strLabel))
+                ax3.set_xlabel('time')
+                ax3.set_ylabel('Validation Accuracy')
+                raise ValueError('Fix')
                 ax3.legend()
 
                 # Plotting loss
-                # ax2.plot(t, train_loss, label='Train')
                 ax4.plot(tt, loss[1], label=(method + strLabel))
-                ax4.set_xlabel('time', fontsize=14)
-                ax4.set_ylabel('Validation Loss', fontsize=14)
+                ax4.set_xlabel('time')
+                ax4.set_ylabel('Validation Loss')
                 ax4.legend()
 
-                fig3.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + 'Acc' + '.pdf', dpi=300)
-                fig4.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + 'Loss' + '.pdf', dpi=300)
+                fig3.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + 'Acc' + '.pdf', dpi=300,
+                             bbox_inches='tight', pad_inches=0.1)
+                fig4.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + 'Loss' + '.pdf', dpi=300,
+                             bbox_inches='tight', pad_inches=0.1)
             ax1.legend()
-            ax1.set_xlabel('time', fontsize=14)
-            ax1.set_ylabel('f(x,y)', fontsize=14)
+            ax1.set_xlabel('time')
+            ax1.set_ylabel('f(x,y)')
 
             ax11.legend()
-            ax11.set_xlabel('time', fontsize=14)
-            ax11.set_ylabel(r'$\|\nabla F(x,y)\|$', fontsize=14)
+            ax11.set_xlabel('time')
+            ax11.set_ylabel(r'$\|\nabla F(x,y)\|$')
             ax11.set_yscale('log')
 
             ax2.legend()
-            ax2.set_xlabel('time', fontsize=14)
-            ax2.set_ylabel(r'$\|\nabla g(x,y)\|$', fontsize=14)
+            ax2.set_xlabel('time')
+            ax2.set_ylabel(r'$\|\nabla g(x,y)\|$')
 
 
             # plt.tight_layout()
             scenarioItems = ['method', 'alpha', 'epsilon']
             item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            fig1.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf', dpi=300)
-            fig11.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf', dpi=300)
-            fig2.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf', dpi=300)
+            fig1.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
+                          dpi=300, bbox_inches='tight', pad_inches=0.1)
+            fig11.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
+                           dpi=300, bbox_inches='tight', pad_inches=0.1)
+            fig2.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
+                          dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
     plt.close(fig1)

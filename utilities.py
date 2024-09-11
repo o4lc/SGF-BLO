@@ -4,12 +4,12 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 def get_axs(toy_example=False):
-    fig1, ax1 = plt.subplots(1, 1, figsize=(7, 5))
-    fig11, ax11 = plt.subplots(1, 1, figsize=(7, 5))
-    fig2, ax2 = plt.subplots(1, 1, figsize=(7, 5))
+    fig1, ax1 = plt.subplots(1, 1, figsize=(8, 6))
+    fig11, ax11 = plt.subplots(1, 1, figsize=(8, 6))
+    fig2, ax2 = plt.subplots(1, 1, figsize=(8, 6))
     if not toy_example:
-        fig3, ax3 = plt.subplots(1, 1, figsize=(7, 5))
-        fig4, ax4 = plt.subplots(1, 1, figsize=(7, 5))
+        fig3, ax3 = plt.subplots(1, 1, figsize=(8, 6))
+        fig4, ax4 = plt.subplots(1, 1, figsize=(8, 6))
         return fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4
     else:
         return fig1, ax1, fig11, ax11, fig2, ax2
@@ -21,12 +21,12 @@ def scenario_setup(id):
                  ('InversionFree', 1, 0.1, None)]
     elif id == 1: #scenarioEps
         return [('InversionFree', 0.1, 0.05, None), ('InversionFree', 0.1, 0.1, None),
-                ('InversionFree', 0.1, 0.5, None), ('InversionFree', 0.1, 1, None)]
+                ('InversionFree', 0.1, 0.2, None), ('InversionFree', 0.1, 0.5, None)]
     elif id == 2: #scenario2ndOrder
         return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
     elif id == 3: #scenarioOthers
-        return [('InversionFree', 0.1, 0.1, 0.25), ('AITBio', 0.1, 0.1, 0.25), ('TTSA', 0.1, 0.1, 0.25),
-                ('InversionFree', 0.1, 0.1, 0.5), ('AITBio', 0.1, 0.1, 0.5), ('TTSA', 0.1, 0.1, 0.5)]
+        return [('InversionFree', 0.1, 0.1, 0.25), ('AITBio', 0.1, 0.1, 0.25),
+                ('InversionFree', 0.1, 0.1, 0.5), ('AITBio', 0.1, 0.1, 0.5),]
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
@@ -114,36 +114,38 @@ def load_setup(toy_example=False, p=None):
     
 
 def calculate_accuracy(A, B, W):
-    predictions = A @ W  # (n_samples, num_classes)
-    predicted_labels = torch.argmax(predictions, dim=1)
-    true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
-    correct_predictions = (predicted_labels == true_labels).float().sum()
-    return correct_predictions / B.size(0)
+    with torch.no_grad():
+        predictions = A @ W  # (n_samples, num_classes)
+        predicted_labels = torch.argmax(predictions, dim=1)
+        true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
+        correct_predictions = (predicted_labels == true_labels).float().sum()
+        return (correct_predictions / B.size(0)).detach().numpy() 
 
 # Helper function to calculate loss
 def calculate_loss(A, B, W):
-    logits = A @ W  # (n_samples, num_classes)
-    true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
-    loss = torch.nn.functional.cross_entropy(logits, true_labels, reduction='mean')
-    return loss.unsqueeze(0).unsqueeze(0)
+    with torch.no_grad():
+        logits = A @ W  # (n_samples, num_classes)
+        true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
+        loss = torch.nn.functional.cross_entropy(logits, true_labels, reduction='mean')
+        return loss.unsqueeze(0).unsqueeze(0).detach().numpy()
 
 
 def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives):
-    # Calculate lossf directly as a tensor, avoid unnecessary reshaping
-    lossf = f(sol[:sizeX], sol[sizeX:]).reshape(-1, )
-
     # Calculate derivatives
     dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(sol[:sizeX], sol[sizeX:])
 
-    # Compute norms as tensors
-    lossG = torch.linalg.norm(dgdy)
-    lossF = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
-    # Detach and convert to NumPy arrays for storage
-    return (
-        lossf.detach().numpy(), 
-        lossG.detach().numpy(), 
-        lossF.detach().numpy()
-    )
+    with torch.no_grad():
+        # Calculate lossf directly as a tensor, avoid unnecessary reshaping
+        lossf = f(sol[:sizeX], sol[sizeX:]).reshape(-1, )
+        # Compute norms as tensors
+        lossG = torch.linalg.norm(dgdy)
+        lossF = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
+        # Detach and convert to NumPy arrays for storage
+        return (
+            lossf.item(), 
+            lossG.item(), 
+            lossF.item()
+        )
 
 def conjugate_gradient(A, b, x0, N):
     r = b - np.dot(A, x0)
