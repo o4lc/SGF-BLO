@@ -147,14 +147,15 @@ def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
 
 def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss):
     train_accuracy.append(calculate_accuracy(A_tr, B_tr, W.reshape(dimY, -1)).reshape(-1))
-    train_loss.append(calculate_loss(A_tr, B_tr, W.reshape(dimY, -1)).reshape(-1))
     val_accuracy.append(calculate_accuracy(A_val, B_val, W.reshape(dimY, -1)).reshape(-1))
-    val_loss.append(calculate_loss(A_val, B_val, W.reshape(dimY, -1)).reshape(-1))
     test_accuracy.append(calculate_accuracy(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
+
+    train_loss.append(calculate_loss(A_tr, B_tr, W.reshape(dimY, -1)).reshape(-1))
+    val_loss.append(calculate_loss(A_val, B_val, W.reshape(dimY, -1)).reshape(-1))
     test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
     return train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss
 
-def AITBio(x, y0, alpha=0.01, beta=0.01, K=10, D=10):
+def AIDBio(x, y0, alpha=0.5, beta=0.5, K=10, D=10):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
     y = y0
     lossF, lossG, lossF2 = [], [], []
@@ -201,8 +202,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # 
     toy_example = args.toy_example
-    torch.manual_seed(0); np.random.seed(0)
-    # 
     plt.rcParams.update({
     'font.size': 16,          # General font size
     'xtick.labelsize': 16,    # Tick label size for x-axis
@@ -220,30 +219,32 @@ if __name__ == '__main__':
         f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(toy_example, p=scenarios[0][3])
         fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4 = get_axs(toy_example)
     
-    calc_derivatives = calc_derivatives_analytic
-
-
-
     sizeX = dimX[0] * dimX[1]; sizeY = dimY[0] * dimY[1]
     
 
-    if toy_example:
-        x = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32)
-        t = torch.linspace(0, 10, 1000)
-    else:
-        x = torch.zeros((sizeX, 1), requires_grad=True, dtype=torch.float32)
-        t = torch.linspace(0, 500, 500)
 
-    if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
-        y0, dgdy = solveLL(x)
-    else:
-        y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
 
     for (method, alpha, epsilon, p) in scenarios:
-        print('-- Method:', method, 'Alpha:', alpha, 'Epsilon:', epsilon)
+        torch.manual_seed(0); np.random.seed(0) 
+        if toy_example:
+            x = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32)
+            t = torch.linspace(0, 10, 1000)
+        else:
+            x = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
+            t = torch.linspace(0, 100, 100)
 
-        if not toy_example: f, g, A_tr, B_tr, A_val, solutionB_val, A_test, B_test, dimX, dimY = load_setup(toy_example, p=p)
+        if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
+            y0, dgdy = solveLL(x)
+        else:
+            y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
+
+        if not toy_example: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(toy_example, p=p)
+        calc_derivatives = calc_derivatives_analytic
+        lossF, lossG, lossF2 = [], [], []
+        acc, loss = None, None
+        
         # -----------------------------------------------------------------
+        print('-- Method:', method, 'Alpha:', alpha, 'Epsilon:', epsilon)
         t1 = time.time()
         if method in ['InversionFree', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
             initial_conditions = torch.cat((x, y0), 0)
@@ -251,7 +252,6 @@ if __name__ == '__main__':
             solution = torchdiffeq.odeint(system, initial_conditions, t, method='rk4')
             progress_bar.close()
             tt = t
-            lossF, lossG, lossF2 = [], [], []
             train_accuracy, val_accuracy, test_accuracy = [], [], []
             train_loss, val_loss, test_loss = [], [], []
             for i in range(len(solution)):
@@ -265,13 +265,12 @@ if __name__ == '__main__':
                             add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss)
                                                                       
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
-        elif method == 'AITBio':
-            lossF, lossG, lossF2, acc, loss = AITBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
+        elif method == 'AIDBio':
+            lossF, lossG, lossF2, acc, loss = AIDBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
-        elif method == 'TTSA':
-            # y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
-            lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
-            tt = torch.linspace(0, t[-1], lossF.shape[0])
+        # elif method == 'TTSA':
+        #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
+        #     tt = torch.linspace(0, t[-1], lossF.shape[0])
         else:
             raise ValueError('Invalid method')
         print('Time taken:', time.time() - t1, '\n')
@@ -302,10 +301,9 @@ if __name__ == '__main__':
             if not toy_example: 
                 # Plotting accuracy
                 print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item())
-                ax3.plot(tt, acc[1], label=(method + strLabel))
+                ax3.plot(tt, acc[2], label=(method + strLabel))
                 ax3.set_xlabel('time')
-                ax3.set_ylabel('Validation Accuracy')
-                raise ValueError('Fix')
+                ax3.set_ylabel('Test Accuracy')
                 ax3.legend()
 
                 # Plotting loss

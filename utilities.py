@@ -25,8 +25,8 @@ def scenario_setup(id):
     elif id == 2: #scenario2ndOrder
         return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
     elif id == 3: #scenarioOthers
-        return [('InversionFree', 0.1, 0.1, 0.25), ('AITBio', 0.1, 0.1, 0.25),
-                ('InversionFree', 0.1, 0.1, 0.5), ('AITBio', 0.1, 0.1, 0.5),]
+        return [('InversionFree', 0.1, 0.1, 0.25), ('AIDBio', 0.1, 0.1, 0.25),
+                ('InversionFree', 0.1, 0.1, 0.4), ('AIDBio', 0.1, 0.1, 0.4),]
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
