@@ -206,11 +206,14 @@ if __name__ == '__main__':
     'font.size': 16,          # General font size
     'xtick.labelsize': 16,    # Tick label size for x-axis
     'ytick.labelsize': 16,    # Tick label size for y-axis
-    'axes.labelsize': 16      # Font size for axis labels
+    'axes.labelsize': 16,      # Font size for axis labels,
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42
 })
 
 
     scenarios = scenario_setup(args.senarioID)
+    calc_derivatives = calc_derivatives_analytic
 
     if toy_example:
         f, g, c, d, A, H, dimX, dimY = load_setup(toy_example)
@@ -228,7 +231,7 @@ if __name__ == '__main__':
         torch.manual_seed(0); np.random.seed(0) 
         if toy_example:
             x = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32)
-            t = torch.linspace(0, 10, 1000)
+            t = torch.linspace(0, 200, 20000)
         else:
             x = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
             t = torch.linspace(0, 100, 100)
@@ -239,7 +242,6 @@ if __name__ == '__main__':
             y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
 
         if not toy_example: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(toy_example, p=p)
-        calc_derivatives = calc_derivatives_analytic
         lossF, lossG, lossF2 = [], [], []
         acc, loss = None, None
         
@@ -322,7 +324,7 @@ if __name__ == '__main__':
 
             ax11.legend()
             ax11.set_xlabel('time')
-            ax11.set_ylabel(r'$\|\nabla F(x,y)\|$')
+            ax11.set_ylabel(r'$\|F(x,y)\|$')
             ax11.set_yscale('log')
 
             ax2.legend()
