@@ -191,7 +191,43 @@ def AIDBio(x, y0, alpha=0.5, beta=0.5, K=10, D=10):
         
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
+def BOME(x, y0, alpha, K, T):
+    global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
+    y = y0
+    lossF, lossG, lossF2 = [], [], []
+    train_accuracy, val_accuracy, test_accuracy = [], [], []
+    train_loss, val_loss, test_loss = [], [], []
 
+    for k in tqdm(range(K)):
+        y_gd = y
+        for t in range(T):
+            dfdx, dfdy, dgdx, dgdy, _, _ = calc_derivatives(x, y_gd)
+            # f_val = f(x, y_gd)
+            # dgdy = torch.autograd.grad(f_val, y_gd, create_graph=True, allow_unused=True, materialize_grads=True)[0]
+            y_gd = y_gd - alpha * dgdy
+            # term1, term2, term3 = calculate_losses(torch.cat((x, y_gd), 0), f, sizeX, sizeY, calc_derivatives)
+            # lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+            # if not toy_example:
+            #     train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y_gd, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                        # train_loss, val_loss, test_loss)
+
+        dfdx, dfdy, dgdx, dgdy, _, _ = calc_derivatives(x, y)
+        _, _, dgdx2, dgdy2, _, _ = calc_derivatives(x, y_gd)
+        dqdx = dgdx - dgdx2
+        dqdy = dgdy - dgdy2
+        with torch.no_grad():
+            phi = torch.linalg.norm(torch.cat((dqdx, dqdy)), 2)**2
+            lam = torch.max(torch.Tensor([0]), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
+            x = x - alpha * (dfdx + lam * dqdx)
+            y = y - alpha * (dfdy + lam * dqdy)
+
+        term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
+        lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+        if not toy_example:
+            train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                    train_loss, val_loss, test_loss)
+    
+    return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
 
 if __name__ == '__main__':
@@ -269,6 +305,9 @@ if __name__ == '__main__':
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
         elif method == 'AIDBio':
             lossF, lossG, lossF2, acc, loss = AIDBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
+            tt = torch.linspace(0, t[-1], lossF.shape[0])
+        elif method == 'BOME':
+            lossF, lossG, lossF2, acc, loss = BOME(x, y0, alpha=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), T=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         # elif method == 'TTSA':
         #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
