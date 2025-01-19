@@ -11,7 +11,7 @@ from tqdm import tqdm
 from utilities import scenario_setup, calculate_accuracy, calculate_loss, get_axs
 from utilities import load_setup, conjugate_gradient, calculate_loss, calculate_accuracy, calculate_losses
 
-def calc_derivatives_analytic(x, y):
+def calc_derivatives_analytic(x, y, matrixVectorProduct=False):
     if toy_example:
         dfdx = torch.cos(c.T @ x + d.T @ y) * c + 2 *(x+y) / (torch.linalg.norm(x+y)**2 + 1)
         dfdy = torch.cos(c.T @ x + d.T @ y) * d + 2 * (x+y) / (torch.linalg.norm(x+y)**2 + 1)
@@ -21,6 +21,8 @@ def calc_derivatives_analytic(x, y):
 
         dgdyy = H.T @ H
         dgdyx = -H
+        return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
+
     else:
         x = x.reshape(dimX); y = y.reshape(dimY)
         logits_val = A_val @ y
@@ -40,15 +42,19 @@ def calc_derivatives_analytic(x, y):
         # dgdyy = 1 / n_train * A_tr.T @ (softmax_y * (1 - softmax_y) * A_tr) \
         #             + 2 * lam * torch.eye(sizeY)
         y = y.reshape((sizeY, 1))
+        # print(y[0])
         g_val = g(x, y)
         dgdy = torch.autograd.grad(g_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
-        dgdyy = torch.zeros((sizeY, sizeY))
-        for i in range(dgdy.shape[0]):
-            dgdyy[i, :] = torch.autograd.grad(dgdy[i], y, retain_graph=True, create_graph=True,
-                                               allow_unused=True, materialize_grads=True)[0][:, 0]
-        
-    return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
-
+        if matrixVectorProduct:
+            hessian_vector_product = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
+            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx
+        else:
+            dgdyy = torch.zeros((sizeY, sizeY))
+            for i in range(dgdy.shape[0]):
+                dgdyy[i, :] = torch.autograd.grad(dgdy[i], y, retain_graph=True, create_graph=True,
+                                                allow_unused=True, materialize_grads=True)[0][:, 0]
+            
+            return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
 def solveLL(x):
     t0 = time.time()
@@ -71,11 +77,16 @@ def system(t, variables):
     global dxdt #Because its previous value is required in ProjectMethod 1
     progress_bar.update(1)
 
-    dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
+    if method in ['InversionFree', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
+        dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y, matrixVectorProduct=False)
+        hessian_vector_product = dgdyy.T @ dgdy
+    elif method == 'InversionFree':
+        dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
+
     with torch.no_grad():    
         if method == 'InversionFree':
             a = 2 * dgdyx.T @ dgdy
-            b = 2 * dgdyy @ dgdy
+            b = 2 * hessian_vector_product
             c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - epsilon**2)
             ab = torch.cat((a, b), 0)
 
@@ -86,7 +97,7 @@ def system(t, variables):
             
             # if torch.linalg.norm(dgdy, 2) > epsilon and not torch.allclose(torch.linalg.norm(dgdy, 2), torch.Tensor([epsilon])):
             #     print('t=',t, '-', torch.linalg.norm(dgdy, 2), epsilon)
-        #  
+
         elif method == 'NewSecondOrder':
             a = dgdyx @ dgdyx.T
             b = dgdyy @ dgdyy.T
@@ -205,11 +216,6 @@ def BOME(x, y0, alpha, K, T):
             # f_val = f(x, y_gd)
             # dgdy = torch.autograd.grad(f_val, y_gd, create_graph=True, allow_unused=True, materialize_grads=True)[0]
             y_gd = y_gd - alpha * dgdy
-            # term1, term2, term3 = calculate_losses(torch.cat((x, y_gd), 0), f, sizeX, sizeY, calc_derivatives)
-            # lossF.append(term1); lossG.append(term2); lossF2.append(term3)
-            # if not toy_example:
-            #     train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y_gd, train_accuracy, val_accuracy, test_accuracy, 
-                                                                                                        # train_loss, val_loss, test_loss)
 
         dfdx, dfdy, dgdx, dgdy, _, _ = calc_derivatives(x, y)
         _, _, dgdx2, dgdy2, _, _ = calc_derivatives(x, y_gd)
@@ -220,7 +226,7 @@ def BOME(x, y0, alpha, K, T):
             lam = torch.max(torch.Tensor([0]), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
             x = x - alpha * (dfdx + lam * dqdx)
             y = y - alpha * (dfdy + lam * dqdy)
-
+        y.requires_grad = True
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
         if not toy_example:
@@ -270,7 +276,7 @@ if __name__ == '__main__':
             t = torch.linspace(0, 200, 20000)
         else:
             x = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
-            t = torch.linspace(0, 100, 100)
+            t = torch.linspace(0, 20, 20)
 
         if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
             y0, dgdy = solveLL(x)
