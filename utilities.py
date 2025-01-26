@@ -15,6 +15,9 @@ def get_axs(toy_example=False):
         return fig1, ax1, fig11, ax11, fig2, ax2
 
 def scenario_setup(id):
+    '''
+    (name of the method, alpha, epsilon, corropution rate)
+    '''
     if id == 0: #scenarioAlpha
         return [('InversionFree', 0.01, 0.1, None), ('InversionFree', 0.05, 0.1, None), 
                  ('InversionFree', 0.1, 0.1, None), ('InversionFree', 0.5, 0.1, None), 
@@ -22,13 +25,22 @@ def scenario_setup(id):
     elif id == 1: #scenarioEps
         return [('InversionFree', 0.1, 0.05, None), ('InversionFree', 0.1, 0.1, None),
                 ('InversionFree', 0.1, 0.2, None), ('InversionFree', 0.1, 0.5, None)]
-    elif id == 2: #scenario2ndOrder
-        return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
-    elif id == 3: #scenarioOthers
+    elif id == 2: #scenarioOthers
         return [('InversionFree', 0.1, 0.1, 0.25), ('AIDBio', 0.1, 0.1, 0.25),
                 ('InversionFree', 0.1, 0.1, 0.4), ('AIDBio', 0.1, 0.1, 0.4),]
-    elif id == 4: #scenarioOthers
-        return [('BOME', 0.1, 0.1, 0.25), ('InversionFree', 0.1, 0.1, 0.25)]
+    # ----------------------------------------
+    elif id == 3: #scenario2ndOrder
+        return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
+    # ----------------------------------------
+    elif id == 4: #scenarioIFDTAlpha
+        return [('IFDT', 0.1, 0.1, None), ('IFDT', 0.2, 0.1, None), ('IFDT', 0.5, 0.1, None)]
+    elif id == 5: #scenarioIFDTEps
+        return [('IFDT', 0.1, 0.1, None), ('IFDT', 0.1, 0.2, None), ('IFDT', 0.1, 0.5, None)]
+    elif id == 6: #scenarioIFDvIFCT
+        return [('IFDT', 0.1, 0.1, 0.25), ('InversionFree', 0.1, 0.1, 0.25)]
+    elif id == 7: #scenarioIFDcompare
+        return [('IFDT', 0.1, 0.1, 0.25), ('AIDBio', 0.1, 0.1, 0.25), ('BOME', 0.1, 0.1, 0.25)]
+    # ----------------------------------------
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
@@ -134,11 +146,12 @@ def calculate_loss(A, B, W):
 
 def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives):
     # Calculate derivatives
-    dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(sol[:sizeX], sol[sizeX:])
+    x, y = sol[:sizeX], sol[sizeX:]
+    dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
 
     with torch.no_grad():
         # Calculate lossf directly as a tensor, avoid unnecessary reshaping
-        lossf = f(sol[:sizeX], sol[sizeX:]).reshape(-1, )
+        lossf = f(x, y).reshape(-1, )
         # Compute norms as tensors
         lossG = torch.linalg.norm(dgdy)
         lossF = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)

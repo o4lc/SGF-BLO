@@ -42,12 +42,12 @@ def calc_derivatives_analytic(x, y, matrixVectorProduct=False):
         # dgdyy = 1 / n_train * A_tr.T @ (softmax_y * (1 - softmax_y) * A_tr) \
         #             + 2 * lam * torch.eye(sizeY)
         y = y.reshape((sizeY, 1))
-        # print(y[0])
         g_val = g(x, y)
         dgdy = torch.autograd.grad(g_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
         if matrixVectorProduct:
             hessian_vector_product = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
             return dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx
+
         else:
             dgdyy = torch.zeros((sizeY, sizeY))
             for i in range(dgdy.shape[0]):
@@ -77,11 +77,11 @@ def system(t, variables):
     global dxdt #Because its previous value is required in ProjectMethod 1
     progress_bar.update(1)
 
-    if method in ['InversionFree', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
+    if (method == 'InversionFree') and not toy_example:
+        dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
+    else:
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y, matrixVectorProduct=False)
         hessian_vector_product = dgdyy.T @ dgdy
-    elif method == 'InversionFree':
-        dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
 
     with torch.no_grad():    
         if method == 'InversionFree':
@@ -125,13 +125,54 @@ def system(t, variables):
     
     return torch.cat((dxdt, dydt), 0)
 
+def IFDT(x, y, alpha, alpha_step=0.1, K=100):
+    global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example, calc_derivatives
+
+    lossF, lossG, lossF2 = [], [], []
+    train_accuracy, val_accuracy, test_accuracy = [], [], []
+    train_loss, val_loss, test_loss = [], [], []
+    for k in tqdm(range(K)):
+        # Calculate derivatives for current x and y
+        if args.toy_example:
+            dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
+            hessian_vector_product = dgdyy.T @ dgdy
+        else:
+            dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
+
+        a = 2 * dgdyx.T @ dgdy
+        b = 2 * hessian_vector_product
+        c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - epsilon**2)
+        ab = torch.cat((a, b), 0)
+
+        tot = torch.cat((dfdx, dfdy), 0)
+        d = ab * torch.maximum(torch.Tensor([0]), -ab.T @ tot - c) / (torch.linalg.norm(a, 2)**2 + torch.linalg.norm(b, 2)**2)
+        dtotdt = -tot - d
+        dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
+
+        with torch.no_grad():
+            x = x + alpha_step * dxdt
+            y = y + alpha_step * dydt
+
+        # Compute and store losses
+        y.requires_grad = True
+        term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
+        lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+        if not toy_example:
+            train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                    train_loss, val_loss, test_loss)
+
+    # Convert lists of losses to tensors for easy analysis
+    return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
+
+
+
 def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example, calc_derivatives
 
     lossF, lossG, lossF2 = [], [], []
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
-    x.requires_grad = False
+    # x.requires_grad = False
     for k in tqdm(range(K)):
         # Calculate derivatives for current x and y
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -166,18 +207,18 @@ def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_los
     test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
     return train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss
 
-def AIDBio(x, y0, alpha=0.5, beta=0.5, K=10, D=10):
+def AIDBio(x, y0, alpha_step=0.1, beta_step=0.1, K=10, D=10):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
     y = y0
     lossF, lossG, lossF2 = [], [], []
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
     nu = torch.zeros_like(y0)
-    x.requires_grad = False
+    # x.requires_grad = False
     for k in tqdm(range(K)):
         for t in range(D):
             dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
-            y = y - alpha * dgdy
+            y = y - alpha_step * dgdy
             
             term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
             lossF.append(term1); lossG.append(term2); lossF2.append(term3)
@@ -191,7 +232,7 @@ def AIDBio(x, y0, alpha=0.5, beta=0.5, K=10, D=10):
                 nu =  dgdyy.inverse() @ dfdy
             else:
                 nu = conjugate_gradient(dgdyy.detach().numpy(), dfdy.detach().numpy(), nu.detach().numpy(), 10)
-            x = x - beta * (dfdx - dgdyx.T @ nu)
+            x = x - beta_step * (dfdx - dgdyx.T @ nu)
         
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
@@ -202,7 +243,7 @@ def AIDBio(x, y0, alpha=0.5, beta=0.5, K=10, D=10):
         
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
-def BOME(x, y0, alpha, K, T):
+def BOME(x, y0, alpha_step, K, T):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
     y = y0
     lossF, lossG, lossF2 = [], [], []
@@ -212,11 +253,16 @@ def BOME(x, y0, alpha, K, T):
     for k in tqdm(range(K)):
         y_gd = y
         for t in range(T):
+            # inner loop
             dfdx, dfdy, dgdx, dgdy, _, _ = calc_derivatives(x, y_gd)
-            # f_val = f(x, y_gd)
-            # dgdy = torch.autograd.grad(f_val, y_gd, create_graph=True, allow_unused=True, materialize_grads=True)[0]
-            y_gd = y_gd - alpha * dgdy
+            y_gd = y_gd - alpha_step * dgdy
 
+            term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
+            lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+            if not toy_example:
+                train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                    train_loss, val_loss, test_loss)
+        # outer-loop
         dfdx, dfdy, dgdx, dgdy, _, _ = calc_derivatives(x, y)
         _, _, dgdx2, dgdy2, _, _ = calc_derivatives(x, y_gd)
         dqdx = dgdx - dgdx2
@@ -224,8 +270,8 @@ def BOME(x, y0, alpha, K, T):
         with torch.no_grad():
             phi = torch.linalg.norm(torch.cat((dqdx, dqdy)), 2)**2
             lam = torch.max(torch.Tensor([0]), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
-            x = x - alpha * (dfdx + lam * dqdx)
-            y = y - alpha * (dfdy + lam * dqdy)
+            x = x - alpha_step * (dfdx + lam * dqdx)
+            y = y - alpha_step * (dfdy + lam * dqdy)
         y.requires_grad = True
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives)
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
@@ -276,9 +322,9 @@ if __name__ == '__main__':
             t = torch.linspace(0, 200, 20000)
         else:
             x = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
-            t = torch.linspace(0, 20, 20)
+            t = torch.linspace(0, 100, 100)
 
-        if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
+        if toy_example:# and 'InversionFree' in [method for method, _, _, _ in scenarios]:
             y0, dgdy = solveLL(x)
         else:
             y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
@@ -289,6 +335,9 @@ if __name__ == '__main__':
         
         # -----------------------------------------------------------------
         print('-- Method:', method, 'Alpha:', alpha, 'Epsilon:', epsilon)
+        if toy_example: alpha_step = 0.01
+        else: alpha_step = 1
+
         t1 = time.time()
         if method in ['InversionFree', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
             initial_conditions = torch.cat((x, y0), 0)
@@ -310,17 +359,20 @@ if __name__ == '__main__':
                                                                       
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
         elif method == 'AIDBio':
-            lossF, lossG, lossF2, acc, loss = AIDBio(x, y0, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
+            lossF, lossG, lossF2, acc, loss = AIDBio(x, y0, alpha_step=alpha_step, beta_step=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'BOME':
-            lossF, lossG, lossF2, acc, loss = BOME(x, y0, alpha=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), T=10)
+            lossF, lossG, lossF2, acc, loss = BOME(x, y0, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4 / 11)), T=10)
+            tt = torch.linspace(0, t[-1], lossF.shape[0])
+        elif method == 'IFDT':
+            lossF, lossG, lossF2, acc, loss = IFDT(x, y0, alpha, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4)))
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         # elif method == 'TTSA':
         #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
         #     tt = torch.linspace(0, t[-1], lossF.shape[0])
         else:
             raise ValueError('Invalid method')
-        print('Time taken:', time.time() - t1, '\n')
+        print('Time taken:', time.time() - t1)
 
         
         with torch.no_grad():
@@ -337,6 +389,13 @@ if __name__ == '__main__':
             elif flag_epsilon: strLabel = r': $\varepsilon$= ' + str(epsilon)
             elif not toy_example: strLabel = r': p= ' + str(p)
             else: strLabel = ''
+
+            print('Number of Gradient Calculations:', len(tt))
+            if 'InversonFree' not in method:
+                tt = range(lossF.shape[0])
+                t_label = 'iterations'
+            else:
+                t_label = 'time'
             
             ax1.plot(tt, lossF, label= (method + strLabel))
             ax11.plot(tt, lossF2, label=(method + strLabel))
@@ -347,15 +406,15 @@ if __name__ == '__main__':
 
             if not toy_example: 
                 # Plotting accuracy
-                print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item())
+                print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
                 ax3.plot(tt, acc[2], label=(method + strLabel))
-                ax3.set_xlabel('time')
+                ax3.set_xlabel(t_label)
                 ax3.set_ylabel('Test Accuracy')
                 ax3.legend()
 
                 # Plotting loss
                 ax4.plot(tt, loss[1], label=(method + strLabel))
-                ax4.set_xlabel('time')
+                ax4.set_xlabel(t_label)
                 ax4.set_ylabel('Validation Loss')
                 ax4.legend()
 
@@ -364,16 +423,16 @@ if __name__ == '__main__':
                 fig4.savefig('Result/' + ('toy_example/' if toy_example else 'DHC/') + 'Loss' + '.pdf', dpi=300,
                              bbox_inches='tight', pad_inches=0.1)
             ax1.legend()
-            ax1.set_xlabel('time')
+            ax1.set_xlabel(t_label)
             ax1.set_ylabel('f(x,y)')
 
             ax11.legend()
-            ax11.set_xlabel('time')
+            ax11.set_xlabel(t_label)
             ax11.set_ylabel(r'$\|F(x,y)\|$')
             ax11.set_yscale('log')
 
             ax2.legend()
-            ax2.set_xlabel('time')
+            ax2.set_xlabel(t_label)
             ax2.set_ylabel(r'$\|\nabla g(x,y)\|$')
 
 
