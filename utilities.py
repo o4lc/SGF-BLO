@@ -3,11 +3,11 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-def get_axs(toy_example=False):
+def get_axs(toy_example=False, toy_CS=False):
     fig1, ax1 = plt.subplots(1, 1, figsize=(8, 6))
     fig11, ax11 = plt.subplots(1, 1, figsize=(8, 6))
     fig2, ax2 = plt.subplots(1, 1, figsize=(8, 6))
-    if not toy_example:
+    if not toy_example and not toy_CS:
         fig3, ax3 = plt.subplots(1, 1, figsize=(8, 6))
         fig4, ax4 = plt.subplots(1, 1, figsize=(8, 6))
         return fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4
@@ -16,8 +16,9 @@ def get_axs(toy_example=False):
 
 def scenario_setup(id):
     '''
-    (name of the method, alpha, epsilon, corropution rate)
+    (name of the method, alpha, epsilon, corropution rate, mode)
     '''
+    mode = ['RXGD', 'QCQP', 'Ours', 'MO-GD'][2]
     if id == 0: #scenarioAlpha
         return [('InversionFree', 0.01, 0.1, None), ('InversionFree', 0.05, 0.1, None), 
                  ('InversionFree', 0.1, 0.1, None), ('InversionFree', 0.5, 0.1, None), 
@@ -32,21 +33,26 @@ def scenario_setup(id):
     elif id == 3: #scenario2ndOrder
         return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
     # ----------------------------------------
-    elif id == 4: #scenarioIFDTAlpha
-        return [('IFDT', 0.1, 0.1, None), ('IFDT', 0.2, 0.1, None), ('IFDT', 0.5, 0.1, None)]
-    elif id == 5: #scenarioIFDTEps
-        return [('IFDT', 0.1, 0.1, None), ('IFDT', 0.1, 0.2, None), ('IFDT', 0.1, 0.5, None)]
-    elif id == 6: #scenarioIFDvIFCT
-        return [('IFDT', 0.1, 0.1, 0.25), ('InversionFree', 0.1, 0.1, 0.25)]
-    elif id == 7: #scenarioIFDcompare
-        return [('IFDT', 0.1, 0.1, 0.25), ('AIDBio', 0.1, 0.1, 0.25), ('BOME', 0.1, 0.1, 0.25)]
+    elif id == 4: #scenarioIFDT-K ablation
+        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
+    elif id == 5: #scenarioIFDT-K ablation
+        return [('IFDT', 0.1, 0.1, 0, 'Ours2'), ('IFDT', 0.1, 0.1, -1, 'Ours2'), ('IFDT', 0.1, 0.1, -2, 'Ours2')]
+    elif id == 6: #scenarioIFDT SOTA
+        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('BOME', 0.1, 0.1, 0, ' ')]
+    elif id == 7: #scenarioIFDT SOTA 2
+        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' ')]
+    elif id == 8: #scenarioIFDT SOTA 2
+        return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('BOME', 0.1, 0.1, 0.25, ' '), ('AIDBio', 0.1, 0.1, 0.25, ' ')]
     # ----------------------------------------
+    elif id == 9: #scenarioTest
+        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
     
-def load_setup(toy_example=False, p=None):
-    if toy_example:
+def load_setup(testID=0, p=None):
+    if testID == 0 or testID == 1:
+        # Toy example
         c = torch.load('data/c.pt', weights_only=True)
         d = torch.load('data/d.pt', weights_only=True)
         A = torch.load('data/A.pt', weights_only=True)
@@ -58,15 +64,40 @@ def load_setup(toy_example=False, p=None):
             x = x.reshape(dimX); y = y.reshape(dimY)
             return torch.sin(c.T @ x + d.T @ y) + torch.log(torch.linalg.norm(x+y)**2 + 1)
 
-        def g(x, y):
-            x = x.reshape(dimX); y = y.reshape(dimY)
-            return 0.5 * torch.linalg.norm(H@y - x)**2
-        
-        print('dim X:', dimX, 'dim Y:' ,dimY)
+        if testID == 0:
+            def g(x, y):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                return 0.5 * torch.linalg.norm(H@y - x)**2
+        else:
+            def g(x, y):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                return torch.cos(0.5 * torch.linalg.norm(H@y - x)**2)
+    
         return f, g, c, d, A, H, dimX, dimY
     
-    else:
-        string = 'p' + str(p)
+    elif testID == 2:
+        # Toy Coreset selection
+        y_tilde = torch.Tensor([[3], [-2]])
+        X = torch.Tensor([[1, 3], [3, 1], [-2, 2], [-3, 2]])
+
+        dimX = (4, 1); dimY = (2, 1);
+        def f(x, y):
+            x = x.reshape(dimX); y = y.reshape(dimY)
+            return 0.5 * torch.linalg.norm(y - y_tilde)**2
+        
+        def g(x, y):
+            x = x.reshape(dimX); y = y.reshape(dimY)
+            return 0.5 * torch.linalg.norm(y - X.T @ torch.softmax(x,  dim=0))**2
+        
+        return f, g, y_tilde, X, dimX, dimY
+
+    
+    elif testID == 3 or testID == 4:
+        # DHC with PCA and without PCA
+        if testID == 3:
+            string = 'p' + str(p)
+        else:
+            string = 'p' + str(p) + 'Full'
         A_tr = torch.load('data/A_tr' + string + '.pt', weights_only=True).to(torch.float32)
         B_tr = torch.load('data/B_tr' + string + '.pt', weights_only=True).to(torch.float32)
         
@@ -91,6 +122,9 @@ def load_setup(toy_example=False, p=None):
 
         print('dim X:', dimX, 'dim Y:' ,dimY)
         return f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY
+    
+    else:
+        raise ValueError('Invalid test case ID')
     
 # def calc_derivatives(x, y):
 #     f_val = f(x,y)
@@ -180,32 +214,3 @@ def conjugate_gradient(A, b, x0, N):
         rs_old = rs_new
 
     return torch.Tensor(x)
-
-# def AIDBio(x, y0, alpha=0.1, beta=0.01, K=10, D=10):
-#     y = y0
-#     lossF, lossG, lossF2 = [], [], []
-#     for k in range(K):
-#         term = 0
-#         termxy = []
-#         termyy = []
-#         for t in range(D):
-#             dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
-#             termxy.append(dgdyx)
-#             termyy.append(torch.eye(sizeY) - alpha * dgdyy)
-#             y = y - alpha * dgdy
-            
-#             term1, term2, term3 = calculate_losses(torch.cat((x, y), 0))
-#             lossF.append(term1); lossG.append(term2); lossF2.append(term3)
-
-#         for t in range(D):
-#             tmp = torch.eye(sizeY)
-#             for j in range(t+1, D):
-#                 tmp = termyy[j] @ tmp
-#             term += termxy[t].T @ tmp
-#         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
-#         x = x - beta * (dfdx - alpha * term @ dfdy)
-        
-#         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0))
-#         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
-        
-#     return np.array(lossF), np.array(lossG), np.array(lossF2)
