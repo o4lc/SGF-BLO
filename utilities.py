@@ -40,9 +40,10 @@ def scenario_setup(id):
     elif id == 6: #scenarioIFDT SOTA
         return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('BOME', 0.1, 0.1, 0, ' ')]
     elif id == 7: #scenarioIFDT SOTA 2
-        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' ')]
+        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' ') , ('IFDT', 0.1, 0.1, 0, 'Ours1')]
     elif id == 8: #scenarioIFDT SOTA 2
-        return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('BOME', 0.1, 0.1, 0.25, ' '), ('AIDBio', 0.1, 0.1, 0.25, ' ')]
+        # return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('BOME', 0.1, 0.1, 0.25, ' '), ('AIDBio', 0.1, 0.1, 0.25, ' ')]
+        return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('AIDBio', 0.1, 0.1, 0.25, ' ')]
     # ----------------------------------------
     elif id == 9: #scenarioTest
         return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
@@ -178,7 +179,7 @@ def calculate_loss(A, B, W):
         return loss.unsqueeze(0).unsqueeze(0).detach().numpy()
 
 
-def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives):
+def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives, non_convex=False, deltaX=None):
     # Calculate derivatives
     x, y = sol[:sizeX], sol[sizeX:]
     dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -188,7 +189,10 @@ def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives):
         lossf = f(x, y).reshape(-1, )
         # Compute norms as tensors
         lossG = torch.linalg.norm(dgdy)
-        lossF = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
+        if non_convex:
+            lossF = torch.Tensor(torch.linalg.norm(deltaX, 2))
+        else:
+            lossF = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
         # Detach and convert to NumPy arrays for storage
         return (
             lossf.item(), 
