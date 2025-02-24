@@ -49,7 +49,7 @@ def LineSearch(deltaX, x, y, dfdx_old, dfdy_old, feasible=True, armijo=True):
     # return t, x_temp, y_temp
 
 
-def calc_derivatives_analytic(x, y, matrixVectorProduct=False):
+def calc_derivatives(x, y, matrixVectorProduct=False):
     if toy_example or toy_example_nc:
         dfdx = torch.cos(c.T @ x + d.T @ y) * c + 2 *(x+y) / (torch.linalg.norm(x+y)**2 + 1)
         dfdy = torch.cos(c.T @ x + d.T @ y) * d + 2 * (x+y) / (torch.linalg.norm(x+y)**2 + 1)
@@ -109,8 +109,8 @@ def calc_derivatives_analytic(x, y, matrixVectorProduct=False):
         g_val = g(x, y)
         dgdy = torch.autograd.grad(g_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
         if matrixVectorProduct:
-            hessian_vector_product = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
-            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx
+            hessian_vector_product_yy = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
+            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, dgdyx
 
         else:
             dgdyy = torch.zeros((sizeY, sizeY))
@@ -118,6 +118,35 @@ def calc_derivatives_analytic(x, y, matrixVectorProduct=False):
                 dgdyy[i, :] = torch.autograd.grad(dgdy[i], y, retain_graph=True, create_graph=True,
                                                 allow_unused=True, materialize_grads=True)[0][:, 0]
             
+            return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
+
+    else:
+        x = x.reshape(dimX); y = y.reshape(dimY)
+        f_val = f(x,y)
+        g_val, logist_tr = g(x,y, iflogits=True)
+
+        loss = F.cross_entropy(logist_tr, B_tr)
+        sigmoid_x = torch.sigmoid(x)
+
+        dfdx  = torch.zeros_like(x)
+        dfdy = torch.autograd.grad(f_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
+    
+        dgdy = torch.autograd.grad(g_val, y, create_graph=True, retain_graph=True, allow_unused=True, materialize_grads=True)[0]
+        # dgdx = torch.autograd.grad(g_val, x, create_graph=True, allow_unused=True, materialize_grads=True)[0]
+        dgdx = 1 / B_tr.shape[0] * loss * sigmoid_x * (1 - sigmoid_x)
+
+        if matrixVectorProduct:
+            hessian_vector_product_yy = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
+            hessian_vector_product_yx = torch.autograd.grad(dgdy, x, grad_outputs=dgdy, create_graph=True, retain_graph=True, allow_unused=True, materialize_grads=True)[0]
+            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, hessian_vector_product_yx
+        else:
+            # Initialize tensors for 2nd derivatives
+            dgdyy = torch.zeros((sizeY, sizeY))
+            dgdyx = torch.zeros((sizeY, sizeX))
+            # Compute 2nd derivatives element-wise
+            for i in range(dgdy.shape[0]):
+                dgdyy[i, :] = torch.autograd.grad(dgdy[i], y, retain_graph=True, create_graph=True, allow_unused=True, materialize_grads=True)[0][:, 0]
+                dgdyx[i, :] = torch.autograd.grad(dgdy[i], x, retain_graph=True, create_graph=True, allow_unused=True, materialize_grads=True)[0][:, 0]
             return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
 def solveLL(x):
@@ -199,12 +228,16 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
         # Calculate derivatives for current x and y
         if toy_example or toy_example_nc or toy_CS:
             dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
-            hessian_vector_product = dgdyy.T @ dgdy
+            hvp_yy = dgdyy.T @ dgdy
+            hvp_yx = dgdyx.T @ dgdy
         else:
-            dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
+            if args.testID == 5:
+                dfdx, dfdy, dgdx, dgdy, hvp_yy, hvp_yx = calc_derivatives(x, y, matrixVectorProduct=True)
+            else:
+                dfdx, dfdy, dgdx, dgdy, hvp_yy, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
 
-        a = 2 * dgdyx.T @ dgdy
-        b = 2 * hessian_vector_product
+        a = 2 * hvp_yx
+        b = 2 * hvp_yy
         c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - epsilon**2)
         tot = torch.cat((dfdx, dfdy), 0)
         dh = torch.cat((a, b), 0)    
@@ -421,6 +454,7 @@ if __name__ == '__main__':
     toy_CS = (args.testID == 2)
     DHC = (args.testID == 3)
     DHC_LS = (args.testID == 4)
+    NN = (args.testID == 5)
 
     plt.rcParams.update({
     'font.size': 16,          # General font size
@@ -433,7 +467,6 @@ if __name__ == '__main__':
 
 
     scenarios = scenario_setup(args.scenarioID)
-    calc_derivatives = calc_derivatives_analytic
 
     if toy_example or toy_example_nc:
         f, g, c, d, A, H, dimX, dimY = load_setup(args.testID)
@@ -457,6 +490,9 @@ if __name__ == '__main__':
     elif DHC or DHC_LS:
         x0 = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
         t = torch.linspace(0, 50, 50)
+    elif NN:
+        x0 = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32)
+        t = torch.linspace(0, 20, 10000)
 
     if toy_example or toy_example_nc or toy_CS:# and 'InversionFree' in [method for method, _, _, _ in scenarios]:
         y0, dgdy = solveLL(x0)

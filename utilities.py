@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ def scenario_setup(id):
     '''
     (name of the method, alpha, epsilon, corropution rate, mode)
     '''
-    mode = ['RXGD', 'QCQP', 'Ours', 'MO-GD'][2]
+    # mode = ['RXGD', 'QCQP', 'Ours1', 'Ours2', 'MO-GD', 'NN'][2]
     if id == 0: #scenarioAlpha
         return [('InversionFree', 0.01, 0.1, None), ('InversionFree', 0.05, 0.1, None), 
                  ('InversionFree', 0.1, 0.1, None), ('InversionFree', 0.5, 0.1, None), 
@@ -46,7 +47,7 @@ def scenario_setup(id):
         return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('AIDBio', 0.1, 0.1, 0.25, ' ')]
     # ----------------------------------------
     elif id == 9: #scenarioTest
-        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
+        return [('IFDT', 0.1, 0.1, 0.25, 'Ours1')]
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
@@ -93,7 +94,7 @@ def load_setup(testID=0, p=None):
         return f, g, y_tilde, X, dimX, dimY
 
     
-    elif testID == 3 or testID == 4:
+    elif testID == 3 or testID == 4 or testID == 5:
         # DHC with PCA and without PCA
         if testID == 3:
             string = 'p' + str(p)
@@ -109,21 +110,44 @@ def load_setup(testID=0, p=None):
         B_test = torch.load('data/B_test' + string + '.pt', weights_only=True).to(torch.float32)
 
         lam = 0.001      # Regularization parameter
-        dimX = (A_tr.shape[0], 1); dimY = (A_tr.shape[1], B_tr.shape[1]);
+        if testID == 3 or testID == 4:
+            dimX = (A_tr.shape[0], 1); dimY = (A_tr.shape[1], B_tr.shape[1]);
+            def f(x, y):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                loss = F.cross_entropy(A_val @ y, B_val)
+                return loss
 
-        def f(x, y):
-            x = x.reshape(dimX); y = y.reshape(dimY)
-            loss = F.cross_entropy(A_val @ y, B_val)
-            return loss
+            def g(x, y):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                loss = F.cross_entropy(A_tr @ y, B_tr, reduction='none')
+                return torch.mean(torch.mul(loss, torch.sigmoid(x))) + lam * torch.pow(torch.norm(y, 'fro'), 2)
+        else:
+            dimX = (A_tr.shape[0], 1); dimY = (40785, 1);
+            def f(x, y, iflogits=False):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                model = SimpleNN(A_tr.shape[1], 50, 25, B_tr.shape[1])
+                print(model, A_val.shape, B_val.shape)
+                load_weights(model, y)
+                logits = model(A_val)
+                loss = F.cross_entropy(logits, B_val)
+                if iflogits:
+                    return loss, logits
+                return loss
 
-        def g(x, y):
-            x = x.reshape(dimX); y = y.reshape(dimY)
-            loss = F.cross_entropy(A_tr @ y, B_tr, reduction='none')
-            return torch.mean(torch.mul(loss, torch.sigmoid(x))) + lam * torch.pow(torch.norm(y, 'fro'), 2)
+            def g(x, y, iflogits=False):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                model = SimpleNN(A_tr.shape[1], 50, 25, B_tr.shape[1])
+                load_weights(model, y)
+
+                logits = model(A_tr)
+                loss = F.cross_entropy(logits, B_tr, reduction='none')
+                if iflogits:
+                    return torch.mean(torch.mul(loss, torch.sigmoid(x))) + lam * torch.pow(torch.norm(y, 'fro'), 2), logits
+                return torch.mean(torch.mul(loss, torch.sigmoid(x))) + lam * torch.pow(torch.norm(y, 'fro'), 2)
 
         print('dim X:', dimX, 'dim Y:' ,dimY)
         return f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY
-    
+
     else:
         raise ValueError('Invalid test case ID')
     
@@ -218,3 +242,27 @@ def conjugate_gradient(A, b, x0, N):
         rs_old = rs_new
 
     return torch.Tensor(x)
+
+
+class SimpleNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim1, hidden_dim2, output_dim):
+        super(SimpleNN, self).__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim1)
+        self.fc2 = nn.Linear(hidden_dim1, hidden_dim2)
+        self.fc3 = nn.Linear(hidden_dim2, output_dim)
+    
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)  # No activation here; cross-entropy expects raw logits
+        return x
+
+
+def load_weights(model, y):
+    """Load weights from vector y into the model with autograd tracking."""
+    start = 0
+    for param in model.parameters():
+        num_params = param.numel()
+        with torch.no_grad():
+            param.data = y[start:start + num_params].view(param.shape)  # Keeps tracking
+        start += num_params
