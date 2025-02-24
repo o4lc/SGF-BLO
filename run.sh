@@ -5,5 +5,5 @@
 #          5 -> DHC with NN
 # --------------------------------
 
-python3 main.py --testID 5 --scenarioID 9
+python3 main.py --testID 2 --scenarioID 6
 

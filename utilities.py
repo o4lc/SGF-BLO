@@ -21,18 +21,18 @@ def scenario_setup(id):
     '''
     # mode = ['RXGD', 'QCQP', 'Ours1', 'Ours2', 'MO-GD', 'NN'][2]
     if id == 0: #scenarioAlpha
-        return [('InversionFree', 0.01, 0.1, None), ('InversionFree', 0.05, 0.1, None), 
-                 ('InversionFree', 0.1, 0.1, None), ('InversionFree', 0.5, 0.1, None), 
-                 ('InversionFree', 1, 0.1, None)]
+        return [('InversionFree', 0.01, 0.1, None, None), ('InversionFree', 0.05, 0.1, None, None), 
+                 ('InversionFree', 0.1, 0.1, None, None), ('InversionFree', 0.5, 0.1, None, None), 
+                 ('InversionFree', 1, 0.1, None, None)]
     elif id == 1: #scenarioEps
-        return [('InversionFree', 0.1, 0.05, None), ('InversionFree', 0.1, 0.1, None),
-                ('InversionFree', 0.1, 0.2, None), ('InversionFree', 0.1, 0.5, None)]
+        return [('InversionFree', 0.1, 0.05, None, None), ('InversionFree', 0.1, 0.1, None, None),
+                ('InversionFree', 0.1, 0.2, None, None), ('InversionFree', 0.1, 0.5, None, None)]
     elif id == 2: #scenarioOthers
-        return [('InversionFree', 0.1, 0.1, 0.25), ('AIDBio', 0.1, 0.1, 0.25),
-                ('InversionFree', 0.1, 0.1, 0.4), ('AIDBio', 0.1, 0.1, 0.4),]
+        return [('InversionFree', 0.1, 0.1, 0.25, None), ('AIDBio', 0.1, 0.1, 0.25, None),
+                ('InversionFree', 0.1, 0.1, 0.4, None), ('AIDBio', 0.1, 0.1, 0.4, None)]
     # ----------------------------------------
     elif id == 3: #scenario2ndOrder
-        return [('SecondOrder', 0.1, None, None), ('STABLE', 0.1, None, None)]
+        return [('SecondOrder', 0.1, None, None, None), ('STABLE', 0.1, None, None, None)]
     # ----------------------------------------
     elif id == 4: #scenarioIFDT-K ablation
         return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
@@ -52,18 +52,21 @@ def scenario_setup(id):
          return [('InversionFree', 0.01, 0.1, None)]
 
     
-def load_setup(testID=0, p=None):
+def load_setup(testID=0, p=None, device=None):
+    if device is None:
+        raise ValueError('Device not specified')
+    
     if testID == 0 or testID == 1:
         # Toy example
-        c = torch.load('data/c.pt', weights_only=True)
-        d = torch.load('data/d.pt', weights_only=True)
-        A = torch.load('data/A.pt', weights_only=True)
-        H = torch.load('data/H.pt', weights_only=True)
+        c = torch.load('data/c.pt', weights_only=True).to(device)
+        d = torch.load('data/d.pt', weights_only=True).to(device)
+        A = torch.load('data/A.pt', weights_only=True).to(device)
+        H = torch.load('data/H.pt', weights_only=True).to(device)
 
         dimX = (A.shape[0], 1);dimY = (A.shape[1], 1);
 
         def f(x, y):
-            x = x.reshape(dimX); y = y.reshape(dimY)
+            x = x.reshape(dimX).to(device); y = y.reshape(dimY).to(device)
             return torch.sin(c.T @ x + d.T @ y) + torch.log(torch.linalg.norm(x+y)**2 + 1)
 
         if testID == 0:
@@ -79,8 +82,8 @@ def load_setup(testID=0, p=None):
     
     elif testID == 2:
         # Toy Coreset selection
-        y_tilde = torch.Tensor([[3], [-2]])
-        X = torch.Tensor([[1, 3], [3, 1], [-2, 2], [-3, 2]])
+        y_tilde = torch.Tensor([[3], [-2]]).to(device)
+        X = torch.Tensor([[1, 3], [3, 1], [-2, 2], [-3, 2]]).to(device)
 
         dimX = (4, 1); dimY = (2, 1);
         def f(x, y):
@@ -100,14 +103,14 @@ def load_setup(testID=0, p=None):
             string = 'p' + str(p)
         else:
             string = 'p' + str(p) + 'Full'
-        A_tr = torch.load('data/A_tr' + string + '.pt', weights_only=True).to(torch.float32)
-        B_tr = torch.load('data/B_tr' + string + '.pt', weights_only=True).to(torch.float32)
+        A_tr = torch.load('data/A_tr' + string + '.pt', weights_only=True).to(torch.float32).to(device)
+        B_tr = torch.load('data/B_tr' + string + '.pt', weights_only=True).to(torch.float32).to(device)
         
-        A_val = torch.load('data/A_val' + string + '.pt', weights_only=True).to(torch.float32)
-        B_val = torch.load('data/B_val' + string + '.pt', weights_only=True).to(torch.float32)
+        A_val = torch.load('data/A_val' + string + '.pt', weights_only=True).to(torch.float32).to(device)
+        B_val = torch.load('data/B_val' + string + '.pt', weights_only=True).to(torch.float32).to(device)
 
-        A_test = torch.load('data/A_test' + string + '.pt', weights_only=True).to(torch.float32)
-        B_test = torch.load('data/B_test' + string + '.pt', weights_only=True).to(torch.float32)
+        A_test = torch.load('data/A_test' + string + '.pt', weights_only=True).to(torch.float32).to(device)
+        B_test = torch.load('data/B_test' + string + '.pt', weights_only=True).to(torch.float32).to(device)
 
         lam = 0.001      # Regularization parameter
         if testID == 3 or testID == 4:
@@ -192,7 +195,7 @@ def calculate_accuracy(A, B, W):
         predicted_labels = torch.argmax(predictions, dim=1)
         true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
         correct_predictions = (predicted_labels == true_labels).float().sum()
-        return (correct_predictions / B.size(0)).detach().numpy() 
+        return (correct_predictions / B.size(0)).detach().cpu().numpy() 
 
 # Helper function to calculate loss
 def calculate_loss(A, B, W):
@@ -200,7 +203,7 @@ def calculate_loss(A, B, W):
         logits = A @ W  # (n_samples, num_classes)
         true_labels = torch.argmax(B, dim=1)  # Convert one-hot to class indices
         loss = torch.nn.functional.cross_entropy(logits, true_labels, reduction='mean')
-        return loss.unsqueeze(0).unsqueeze(0).detach().numpy()
+        return loss.unsqueeze(0).unsqueeze(0).detach().cpu().numpy()
 
 
 def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives, non_convex=False, deltaX=None):
@@ -224,24 +227,36 @@ def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives, non_convex=False, d
             lossF.item()
         )
 
+
 def conjugate_gradient(A, b, x0, N):
-    r = b - np.dot(A, x0)
-    p = r.copy()
-    x = x0.copy()
-    rs_old = np.dot(r.T, r)
+    # Determine if inputs are numpy or torch tensors
+    is_numpy = isinstance(A, np.ndarray)
+
+    # Define dot product and norm operations based on type
+    dot = np.dot if is_numpy else torch.matmul
+    norm = np.linalg.norm if is_numpy else torch.norm
+
+    # Copy inputs correctly
+    r = b - dot(A, x0)
+    p = r.copy() if is_numpy else r.clone()
+    x = x0.copy() if is_numpy else x0.clone()
+    rs_old = dot(r.T, r)
 
     for i in range(N):
-        Ap = np.dot(A, p)
-        alpha = rs_old / np.dot(p.T, Ap)
+        Ap = dot(A, p)
+        alpha = rs_old / dot(p.T, Ap)
         x += alpha * p
         r -= alpha * Ap
-        rs_new = np.dot(r.T, r)
-        if np.sqrt(rs_new) < 1e-10:  # Convergence criterion
+        rs_new = dot(r.T, r)
+
+        if norm(r) < 1e-10:  # Convergence criterion
             break
+
         p = r + (rs_new / rs_old) * p
         rs_old = rs_new
 
     return torch.Tensor(x)
+
 
 
 class SimpleNN(nn.Module):

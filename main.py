@@ -82,7 +82,7 @@ def calc_derivatives(x, y, matrixVectorProduct=False):
         dgdx = - ((X @ ( y - X.T @ s)).T @ (torch.diag(s_reshaped) - torch.outer(s_reshaped, s_reshaped))).T
         dgdy = y - X.T @ torch.softmax(x, dim=0)
 
-        dgdyy = torch.eye(dimY[0])
+        dgdyy = torch.eye(dimY[0]).to(y.device)
         dgdyx = -X.T @ (torch.diag(s_reshaped) - torch.outer(s_reshaped, s_reshaped))
 
         return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
@@ -113,11 +113,10 @@ def calc_derivatives(x, y, matrixVectorProduct=False):
             return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, dgdyx
 
         else:
-            dgdyy = torch.zeros((sizeY, sizeY))
+            dgdyy = torch.zeros((sizeY, sizeY)).to(device)
             for i in range(dgdy.shape[0]):
                 dgdyy[i, :] = torch.autograd.grad(dgdy[i], y, retain_graph=True, create_graph=True,
                                                 allow_unused=True, materialize_grads=True)[0][:, 0]
-            
             return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
     else:
@@ -131,13 +130,14 @@ def calc_derivatives(x, y, matrixVectorProduct=False):
         dfdx  = torch.zeros_like(x)
         dfdy = torch.autograd.grad(f_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
     
-        dgdy = torch.autograd.grad(g_val, y, create_graph=True, retain_graph=True, allow_unused=True, materialize_grads=True)[0]
-        # dgdx = torch.autograd.grad(g_val, x, create_graph=True, allow_unused=True, materialize_grads=True)[0]
-        dgdx = 1 / B_tr.shape[0] * loss * sigmoid_x * (1 - sigmoid_x)
+        dgdx, dgdy = torch.autograd.grad(g_val, [x, y], create_graph=True, retain_graph=True, allow_unused=True, materialize_grads=True)
+        # dgdx = 1 / B_tr.shape[0] * loss * sigmoid_x * (1 - sigmoid_x)
 
         if matrixVectorProduct:
-            hessian_vector_product_yy = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
-            hessian_vector_product_yx = torch.autograd.grad(dgdy, x, grad_outputs=dgdy, create_graph=True, retain_graph=True, allow_unused=True, materialize_grads=True)[0]
+            hessian_vector_product_yy = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True, materialize_grads=True)[0]
+            hessian_vector_product_yx = torch.autograd.grad(dgdy, x, grad_outputs=dgdy, create_graph=True, allow_unused=True, materialize_grads=True)[0]
+            print(hessian_vector_product_yy.shape, hessian_vector_product_yx.shape)
+            raise
             return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, hessian_vector_product_yx
         else:
             # Initialize tensors for 2nd derivatives
@@ -149,9 +149,9 @@ def calc_derivatives(x, y, matrixVectorProduct=False):
                 dgdyx[i, :] = torch.autograd.grad(dgdy[i], x, retain_graph=True, create_graph=True, allow_unused=True, materialize_grads=True)[0][:, 0]
             return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
-def solveLL(x):
+def solveLL(x, device=None):
     t0 = time.time()
-    y = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
+    y = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32).to(device)
     lr = 1e-1
     while True:
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -184,7 +184,7 @@ def system(t, variables):
             ab = torch.cat((a, b), 0)
 
             tot = torch.cat((dfdx, dfdy), 0)
-            d = ab * torch.maximum(torch.Tensor([0]), -ab.T @ tot - c) / (torch.linalg.norm(a, 2)**2 + torch.linalg.norm(b, 2)**2)
+            d = ab * torch.maximum(torch.Tensor([0]).to(device), -ab.T @ tot - c) / (torch.linalg.norm(a, 2)**2 + torch.linalg.norm(b, 2)**2)
             dtotdt = -tot - d
             dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
             
@@ -218,8 +218,10 @@ def system(t, variables):
     
     return torch.cat((dxdt, dydt), 0)
 
-def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
+def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None, device=None):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example, calc_derivatives
+
+    zero = torch.Tensor([0]).to(device)
 
     lossF, lossG, lossF2 = lossS
     train_accuracy, val_accuracy, test_accuracy = [], [], []
@@ -231,10 +233,7 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
             hvp_yy = dgdyy.T @ dgdy
             hvp_yx = dgdyx.T @ dgdy
         else:
-            if args.testID == 5:
-                dfdx, dfdy, dgdx, dgdy, hvp_yy, hvp_yx = calc_derivatives(x, y, matrixVectorProduct=True)
-            else:
-                dfdx, dfdy, dgdx, dgdy, hvp_yy, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True)
+            dfdx, dfdy, dgdx, dgdy, hvp_yy, hvp_yx = calc_derivatives(x, y, matrixVectorProduct=True)
 
         a = 2 * hvp_yx
         b = 2 * hvp_yy
@@ -249,12 +248,9 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
             else:
                 deltaX = -tot
             t, x, y = LineSearch(deltaX, x, y, dfdx_old=dfdx, dfdy_old=dfdy)
-            # lossF_tmp = torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy)
-            # if lossF_tmp < 2e-3:
-            #     break
 
         elif mode == 'RXGD':
-            d = dh * torch.maximum(torch.Tensor([0]), -dh.T @ tot - c) / (torch.linalg.norm(dh, 2)**2)
+            d = dh * torch.maximum(zero, -dh.T @ tot - c) / (torch.linalg.norm(dh, 2)**2)
             dtotdt = -tot - d
             dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
             with torch.no_grad():
@@ -266,7 +262,7 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
         elif 'Ours' in mode:
             if mode[-1] == '1':
                 # K^-1/3 ~ 0.001
-                if toy_example_nc: alpha_K = K**(-1/3); alpha_step_K = K**(-1/3)
+                if toy_example or toy_example_nc: alpha_K = K**(-1/3); alpha_step_K = K**(-1/3)
                 elif toy_CS: alpha_K = 0.1 * K**(-1/3); alpha_step_K = 0.1 * K**(-1/3)
                 else: alpha_K = 5 * K**(-1/3); alpha_step_K = 5 * K**(-1/3)
                 cprime = alpha_K * (torch.linalg.norm(dh, 2)**2)
@@ -274,16 +270,13 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None):
                 # K^-1/3 ~ 0.001, K^-2/3 ~ 0.0005
                 alpha_K = 10 * K**(-1/3); alpha_step_K = 10 * K**(-2/3)
                 cprime = alpha_K * (torch.linalg.norm(dh, 2) * torch.linalg.norm(dgdy, 2))
- 
-            lam = torch.maximum(torch.Tensor([0]), -tot.T @ dh + cprime) / torch.linalg.norm(dh, 2)**2
+
+            lam = torch.maximum(zero, -tot.T @ dh + cprime) / torch.linalg.norm(dh, 2)**2
             dtotdt = -tot - lam * dh
             dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
             with torch.no_grad():
                 x = x + alpha_step_K * dxdt
                 y = y + alpha_step_K * dydt
-
-            # print(torch.maximum(torch.linalg.norm(dtotdt, 2)**2, torch.linalg.norm(dgdy)**2))
-
             y.requires_grad = True
 
         else:
@@ -358,7 +351,7 @@ def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_los
     test_loss.append(calculate_loss(A_test, B_test, W.reshape(dimY, -1)).reshape(-1))
     return train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss
 
-def AIDBio(x, y0, alpha_step=0.1, beta_step=0.1, K=10, D=10):
+def AIDBio(x, y0, alpha_step=0.1, beta_step=0.1, K=10, D=10, device=None):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
     y = y0
     lossF, lossG, lossF2 = [], [], []
@@ -385,7 +378,7 @@ def AIDBio(x, y0, alpha_step=0.1, beta_step=0.1, K=10, D=10):
             if False:
                 nu =  dgdyy.inverse() @ dfdy
             else:
-                nu = conjugate_gradient(dgdyy.detach().numpy(), dfdy.detach().numpy(), nu.detach().numpy(), 10)
+                nu = conjugate_gradient(dgdyy.detach(), dfdy.detach(), nu.detach(), 10)
             x = x - beta_step * (dfdx - dgdyx.T @ nu)
         
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives, non_convex=(toy_example_nc or toy_CS),
@@ -398,7 +391,7 @@ def AIDBio(x, y0, alpha_step=0.1, beta_step=0.1, K=10, D=10):
         
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
-def BOME(x, y0, alpha_step, K, T):
+def BOME(x, y0, alpha_step, K, T, device=None):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example
     y = y0
     lossF, lossG, lossF2 = [], [], []
@@ -428,7 +421,7 @@ def BOME(x, y0, alpha_step, K, T):
         dqdy = dgdy
         with torch.no_grad():
             phi = torch.sum(torch.cat((dqdx, dqdy), 0)**2)
-            lam = torch.max(torch.Tensor([0]), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
+            lam = torch.max(torch.Tensor([0]).to(device), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
             x = x - alpha_step * (dfdx + lam * dqdx)
             y = y - alpha_step * (dfdy + lam * dqdy)
         y.requires_grad = True
@@ -456,6 +449,8 @@ if __name__ == '__main__':
     DHC_LS = (args.testID == 4)
     NN = (args.testID == 5)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     plt.rcParams.update({
     'font.size': 16,          # General font size
     'xtick.labelsize': 16,    # Tick label size for x-axis
@@ -469,39 +464,39 @@ if __name__ == '__main__':
     scenarios = scenario_setup(args.scenarioID)
 
     if toy_example or toy_example_nc:
-        f, g, c, d, A, H, dimX, dimY = load_setup(args.testID)
+        f, g, c, d, A, H, dimX, dimY = load_setup(args.testID, device=device)
         fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc)
     elif toy_CS:
-        f, g, y_tilde, X, dimX, dimY = load_setup(args.testID)
+        f, g, y_tilde, X, dimX, dimY = load_setup(args.testID, device=device)
         fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_CS=toy_CS)
     else:
-        f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(args.testID, p=scenarios[0][3])
+        f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(args.testID, p=scenarios[0][3], device=device)
         fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4 = get_axs(toy_example)
     
     sizeX = dimX[0] * dimX[1]; sizeY = dimY[0] * dimY[1]
 
     torch.manual_seed(0); np.random.seed(0)
     if toy_example or toy_example_nc:
-        x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32)
+        x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
         t = torch.linspace(0, 200, 10000)
     elif toy_CS:
-        x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32)
+        x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
         t = torch.linspace(0, 20, 25000)
     elif DHC or DHC_LS:
-        x0 = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32)
+        x0 = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
         t = torch.linspace(0, 50, 50)
     elif NN:
-        x0 = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32)
+        x0 = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32).to(device)
         t = torch.linspace(0, 20, 10000)
 
     if toy_example or toy_example_nc or toy_CS:# and 'InversionFree' in [method for method, _, _, _ in scenarios]:
-        y0, dgdy = solveLL(x0)
+        y0, dgdy = solveLL(x0, device=device)
     else:
-        y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
+        y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32).to(device)
 
 
     for (method, alpha, epsilon, p, mode) in scenarios:  
-        if DHC or DHC_LS: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(args.testID, p=p)
+        if DHC or DHC_LS: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(args.testID, p=p, device=device)
         lossF, lossG, lossF2 = [], [], []
         acc, loss = None, None
 
@@ -528,25 +523,26 @@ if __name__ == '__main__':
             for i in range(len(solution)):
                 dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(solution[i, :sizeX], solution[i, sizeX:])
                 with torch.no_grad():
-                    lossF.append(f(solution[i, :sizeX], solution[i, sizeX:]).detach().numpy().reshape(-1))
-                    lossG.append(torch.linalg.norm(dgdy).detach().numpy())
-                    lossF2.append(torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy).detach().numpy())
+                    lossF.append(f(solution[i, :sizeX], solution[i, sizeX:]).detach().cpu().numpy().reshape(-1))
+                    lossG.append(torch.linalg.norm(dgdy).detach().cpu().numpy())
+                    lossF2.append(torch.linalg.norm(dfdx - dgdyx.T @ dgdyy.inverse() @ dfdy).detach().cpu().numpy())
                     if DHC or DHC_LS:
                         train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss =\
                             add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss)
                                                                       
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
         elif method == 'AIDBio':
-            lossF, lossG, lossF2, acc, loss = AIDBio(x0, y0, alpha_step=alpha_step, beta_step=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
+            lossF, lossG, lossF2, acc, loss = AIDBio(x0, y0, alpha_step=alpha_step, beta_step=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), D=10
+                                                    , device=device)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'BOME':
             if toy_example_nc: alpha_step *= 0.5
             elif toy_CS: alpha_step *= 0.1
-            lossF, lossG, lossF2, acc, loss = BOME(x0, y0, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4 / 11)), T=10)
+            lossF, lossG, lossF2, acc, loss = BOME(x0, y0, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4 / 11)), T=10, device=device)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'IFDT':
             lossF, lossG, lossF2, acc, loss = IFDT(x0, y0, alpha, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4)), mode=mode,
-                                                    lossS=(lossF, lossG, lossF2))
+                                                    lossS=(lossF, lossG, lossF2), device=device)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         # elif method == 'TTSA':
         #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
@@ -579,7 +575,8 @@ if __name__ == '__main__':
             # print(len(lossF2), lossF2, '-------------------------------')
 
             print('Number of Gradient Calculations:', len(tt), '\n')
-            if 'InversonFree' not in method:
+            if 'InversionFree' not in [method for method, _, _, _, _ in scenarios] and \
+                'SecondOrder' not in [method for method, _, _, _, _ in scenarios]:
                 tt = range(len(lossF))
                 t_label = 'iterations'
             else:
