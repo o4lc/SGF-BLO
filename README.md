@@ -12,7 +12,6 @@ To train a model, use the following command:
     bash run.sh
     ```
     This command runs the following code: ` python3 main.py --senarioID x `
-
     Here, `main.py` is the main script, and `--scenarioID` chooses the method to compare with and the parameters for the experiment. The default setup is the DHC, and by adding a flag `--toy_example`, the benchmark can be modified.
     You can modify the configurations based on your experiment.
 
