@@ -39,14 +39,14 @@ def scenario_setup(id):
     elif id == 5: #scenarioIFDT-K ablation
         return [('IFDT', 0.1, 0.1, 0, 'Ours2'), ('IFDT', 0.1, 0.1, -1, 'Ours2'), ('IFDT', 0.1, 0.1, -2, 'Ours2')]
     elif id == 6: #scenarioIFDT SOTA
-        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('BOME', 0.1, 0.1, 0, ' ')]
+        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, 0, 'Ours2'), ('BOME', 0.1, 0.1, 0, ' ')]
     elif id == 7: #scenarioIFDT SOTA 2
-        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' ') , ('IFDT', 0.1, 0.1, 0, 'Ours1')]
+        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' '), ('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, 0, 'Ours2')]
     elif id == 8: #scenarioIFDT SOTA 2
         return [('IFDT', 0.1, 0.1, 0.25, 'Ours1'), ('BOME', 0.1, 0.1, 0.25, ' ')]
     # ----------------------------------------
     elif id == 9: #scenarioTest
-        return [('BOME', 0.1, 0.1, 0.25, ' '), ('IFDT', 0.1, 0.1, 0.25, 'Ours1')]
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP'), ('IFDT', 0.1, 0.1, 0.25, 'Ours1')]
     else:
          return [('InversionFree', 0.01, 0.1, None)]
 
