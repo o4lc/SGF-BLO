@@ -10,50 +10,63 @@ from tqdm import tqdm
 from torchviz import make_dot
 
 
-from utilities import conjugate_gradient, add_loss, calculate_losses
+from utilities import conjugate_gradient, add_loss, calculate_losses, cvxpy_QCQP, cvxpy_MOGD
 from setup import load_setup, scenario_setup, get_axs
+
+def LineSearch_merit(deltaX, x, y, tt, lam, beta, alpha, k=-1):
+    assert beta >= lam
+    eta = 0.05
+    t = tt
+    # if k > 100:
+    #     # print(k)
+    #     t = 0.1
+    #     x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
+    #     return t, x_temp, y_temp
+    dfdx_old, dfdy_old, _, dgdy_old = calc_derivatives(x, y, matrixVectorProduct=True, first_order=True)
+    h_old = torch.linalg.norm(dgdy_old, 2)**2 
+    E_old =  f(x, y) + beta * h_old
+    while True:
+        x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
+        # dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x_temp, y_temp, matrixVectorProduct=False, first_order=False)
+        # dh = 2 * torch.cat((dgdyx.T @ dgdy, dgdyy.T @ dgdy), 0) 
+        dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=False, first_order=True)
+        h_temp = torch.linalg.norm(dgdy, 2)**2  
+        E_new = f(x_temp, y_temp) + beta * h_temp
+        # if E_new > E_old - 0.1 * t * (torch.linalg.norm(deltaX, 2)**2 - (beta - lam) * dh.T @ deltaX):
+        if E_new > E_old + eta * t * (-torch.linalg.norm(deltaX, 2)**2 - (beta - lam) * alpha * h_old):
+            t *= 0.5
+        else:
+            break
+    if k % 100 == 0:
+        print('t=', t, E_new.item(), E_old.item(), '--', h_old.item(), h_temp.item())
+    return t, x_temp, y_temp
 
 def LineSearch(deltaX, x, y, tt, feasible=True, armijo=True):
     t = 10 * tt
+    gamma = 0.01
     dfdx_old, dfdy_old, _, dgdy_old = calc_derivatives(x, y, matrixVectorProduct=True, first_order=True)
-    gamma, w = 0.5, 0.0
     h_old = torch.linalg.norm(dgdy_old, 2)**2 - epsilon**2
-    # x_temp = x; y_temp = y
     # Feasibility check
     if feasible:
         while True:
             x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
             dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=True, first_order=True)
-            # h+ < (1-t gamma)h- - w /t |deltaz|^2
-            # print(t, torch.linalg.norm(dgdy, 2)**2 - epsilon**2, (1 - gamma * t) * h_old - w / t * torch.linalg.norm(deltaX, 2)**2)
-            # raise
-            if torch.linalg.norm(dgdy, 2)**2 - epsilon**2 >= (1 - gamma * t) * h_old - w * torch.linalg.norm(deltaX, 2)**2:
+            if torch.linalg.norm(dgdy, 2)**2 - epsilon**2 > (1 - gamma) * h_old:
+            # if torch.linalg.norm(dgdy, 2)**2 > epsilon**2:
                 t *= 0.5
             else:
                 break 
-            # if h_old <= 0:
-            #     if torch.linalg.norm(dgdy, 2) > epsilon:
-            #         t *= 0.5
-            #     else:
-            #         break
-            # else:
-            #     if torch.linalg.norm(dgdy, 2) - epsilon**2 > h_old:
-            #         t *= 0.5
-            #     else:
-            #         break
-    # print('--', t)
-    # Armijo
     if armijo:
         while True:
             x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
             dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=True, first_order=True)
-
-            if f(x_temp, y_temp) > f(x, y) + 0.25 * t * torch.cat((dfdx_old, dfdy_old), 0).T @ deltaX:
+            # if f(x_temp, y_temp) > f(x, y):
+            if f(x_temp, y_temp) > f(x, y) + 0.1 * t * torch.cat((dfdx_old, dfdy_old), 0).T @ deltaX:
+            # if f(x_temp, y_temp) > f(x, y) - 0.1 * t * torch.linalg.norm(deltaX, 2)**2:
                 t *= 0.5
             else:
                 break
-    # print(t, torch.linalg.norm(deltaX, 2))
-    # print('--', 'h_0', torch.linalg.norm(dgdy, 2))
+    # print('--', t)
     return t, x_temp, y_temp
 
 
@@ -131,7 +144,7 @@ def calc_derivatives(x, y, matrixVectorProduct=False, first_order=False):
             return dfdx, dfdy, dgdx, dgdy
         if matrixVectorProduct:
             hessian_vector_product_yy = torch.autograd.grad(dgdy, y, grad_outputs=dgdy, create_graph=True, allow_unused=True)[0]
-            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, dgdyx @ dgdy
+            return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, dgdyx.T @ dgdy
 
         else:
             dgdyy = torch.zeros((sizeY, sizeY)).to(device)
@@ -154,8 +167,6 @@ def calc_derivatives(x, y, matrixVectorProduct=False, first_order=False):
             return dfdx, dfdy, dgdx, dgdy
         if matrixVectorProduct:
             hessian_vector_product_yy, hessian_vector_product_yx = torch.autograd.grad(dgdy, [y, x], grad_outputs=dgdy, create_graph=True, allow_unused=False)
-            # print('?')
-            # raise
             return dfdx, dfdy, dgdx, dgdy, hessian_vector_product_yy, hessian_vector_product_yx
         else:
             # Initialize tensors for 2nd derivatives
@@ -167,7 +178,7 @@ def calc_derivatives(x, y, matrixVectorProduct=False, first_order=False):
                 dgdyx[i, :] = torch.autograd.grad(dgdy[i], x, retain_graph=True, create_graph=True, allow_unused=True, materialize_grads=True)[0][:, 0]
             return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
-def solveLL(x, device=None):
+def solveLL(x, device=None, threshold=1e-3):
     t0 = time.time()
     y = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32).to(device)
     lr = 1e-1
@@ -186,7 +197,7 @@ def solveLL(x, device=None):
                 print(torch.linalg.norm(dgdy, 2))
             with torch.no_grad():
                 y -= lr * dgdy
-        if torch.linalg.norm(dgdy, 2) < 1e-3:
+        if torch.linalg.norm(dgdy, 2) < threshold:
                     break
         
     print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0, '\n')
@@ -246,15 +257,15 @@ def system(t, variables):
     
     return torch.cat((dxdt, dydt), 0)
 
-def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None, device=None):
-    global A_tr, B_tr, A_val, B_val, A_test, B_test, calc_derivatives
-
+def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, device=None):
+    global A_tr, B_tr, A_val, B_val, A_test, B_test, calc_derivatives, epsilon
     zero = torch.Tensor([0]).to(device)
 
     lossF, lossG, lossF2 = lossS
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
     tt = 1
+    beta = torch.Tensor([beta]).to(device)
     for k in tqdm(range(K)):
         # Calculate derivatives for current x and y
         if toy_example or toy_example_nc or toy_CS:
@@ -270,25 +281,56 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None, device=Non
         tot = torch.cat((dfdx, dfdy), 0)
         dh = torch.cat((a, b), 0)    
         if mode  == 'QCQP':
+            w = 0.01
+            alpha = K**(-1/3) // 100
+            c = -alpha * -(torch.linalg.norm(dgdy, 2)**2 - epsilon**2)**2
             with torch.no_grad():
-                w = 0.1
-                rad = torch.sqrt(torch.linalg.norm(dh / (2*w))**2 + c / w)
-                term = torch.linalg.norm(-tot + dh / (2 * w))
-                if term > rad:
-                    dtotdt = -dh/(2*w) + rad * (-tot + dh / (2 * w)) / term
-                    assert torch.allclose(torch.linalg.norm(dtotdt + dh/(2*w)), rad, atol=1e-6)
-                else:
-                    dtotdt = -tot
-                # print(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2)
+                dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
+                dtotdt = torch.Tensor(dtotdt).to(device)
+                lam = torch.Tensor(lam).to(device)
+                # rad = torch.sqrt(torch.linalg.norm(dh / (2*w))**2 + c / w)
+                # term = torch.linalg.norm(-tot + dh / (2 * w))
+                # if term > rad:
+                #     dtotdt = -dh/(2*w) + rad * (-tot + dh / (2 * w)) / term
+                #     assert torch.allclose(torch.linalg.norm(dtotdt + dh/(2*w)), rad, atol=1e-6)
+                # else:
+                #     dtotdt = -tot
 
-                # Checking the step!
-                assert (dh.T @ dtotdt < c - w * torch.linalg.norm(dtotdt, 2)**2) or \
-                        torch.allclose(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2, atol=1e-1)
-                if torch.linalg.norm(dgdy, 2) < epsilon:
-                    assert tot.T @ dtotdt < 0
-                else:
-                    assert dh.T @ dtotdt <= 0
+                # # Checking the step!
+                # if False:
+                #     dtotdt_cvxpy = cvxpy_QCQP(tot, dh, c, w)
+                #     assert torch.allclose(dtotdt.detach().cpu().numpy(), dtotdt_cvxpy, atol=1e-5)
+                # else:
+                #     assert (dh.T @ dtotdt < c - w * torch.linalg.norm(dtotdt, 2)**2) or \
+                #             torch.allclose(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2, atol=1e-1)
+                #     if torch.linalg.norm(dgdy, 2) < epsilon:
+                #         assert tot.T @ dtotdt <= 0
+                #     else:
+                #         assert dh.T @ dtotdt <= 0
             tt, x, y = LineSearch(dtotdt, x, y, tt=0.1)
+            
+        elif mode == 'MOGD':
+            if k % 1000 == 0:
+                print('==', k, beta)
+                beta *= 2
+            # c = -alpha * torch.linalg.norm(dgdy, 2)**2
+            c = -alpha * torch.linalg.norm(dgdy, 2)**2
+            with torch.no_grad():
+                dtotdt, lam = cvxpy_MOGD(tot, dh, c, beta)
+                # dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
+                dtotdt = torch.Tensor(dtotdt).to(device)
+                lam = torch.Tensor(lam).to(device)
+                # 
+                # dtotdt = -tot - beta * dh
+                lam = 0
+                if k % 100 == 0:
+                    print(torch.linalg.norm(dtotdt, 2), lam)
+                if beta < lam:
+                    print('beta < lam', beta, lam)
+                    beta = lam
+            tt, x, y = LineSearch_merit(dtotdt, x, y, tt=10, lam=lam, beta=beta, alpha=alpha, k=k)
+
+
 
         elif mode == 'RXGD':
             with torch.no_grad():
@@ -317,6 +359,13 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None, device=Non
 
                 lam = torch.maximum(zero, -tot.T @ dh + cprime) / torch.linalg.norm(dh, 2)**2
                 dtotdt = -tot - lam * dh
+                dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
+                # if p == 0:
+                #     if beta < lam:
+                #         print('beta < lam', beta, lam)
+                #         beta = lam
+                #     tt, x, y = LineSearch_merit(dtotdt, x, y, tt=0.5, lam=lam, beta=beta, alpha=alpha)
+                # else:
                 dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
                 x = x + alpha_step_K * dxdt
                 y = y + alpha_step_K * dydt
@@ -357,7 +406,7 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, mode='RXGD', lossS=None, device=Non
 
 
 
-def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
+def TTSA(x, y, alpha=0.1, beta_step=0.1, K=100):
     global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example, calc_derivatives
 
     lossF, lossG, lossF2 = [], [], []
@@ -369,7 +418,7 @@ def TTSA(x, y, alpha=0.1, beta=0.1, K=100):
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
 
         # Update y
-        y = y - beta / (1+k)**(3/5) * dgdy
+        y = y - beta_step / (1+k)**(3/5) * dgdy
 
         # Recalculate derivatives after updating y
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y)
@@ -467,7 +516,7 @@ def BOME(x, y0, alpha_step, K, T, device=None):
             lam = torch.max(torch.Tensor([0]).to(device), 0.1 * phi - (dqdx.T @ dfdx + dqdy.T @ dfdy)) / phi
             x = x - alpha_step * (dfdx + lam * dqdx)
             y = y - alpha_step * (dfdy + lam * dqdy)
-        y.requires_grad = True
+        # y.requires_grad = True
         term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives, testID=args.testID, 
                                                deltaX=torch.cat(((dfdx + lam * dqdx), (dfdy + lam * dqdy)), 0))
         lossF.append(term1); lossG.append(term2); lossF2.append(term3)
@@ -477,6 +526,50 @@ def BOME(x, y0, alpha_step, K, T, device=None):
                                                                                                     train_loss, val_loss, test_loss, pars, dimY, arch)
     
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
+
+def VPBGD(x, y0, alpha_step, K, T, device=None):
+    global A_tr, B_tr, A_val, B_val, A_test, B_test
+    y = y0
+    lossF, lossG, lossF2 = [], [], []
+    train_accuracy, val_accuracy, test_accuracy = [], [], []
+    train_loss, val_loss, test_loss = [], [], []
+
+    gamma_init = 0 
+    gamma_max = 0.2
+    gamma_steps = K * 3 // 4
+    gamma = gamma_init
+    for k in tqdm(range(K)):
+        gamma = min(gamma_max, gamma + gamma_max / gamma_steps)
+        y_gd = y
+        for t in range(T):
+            dfdx, dfdy, dgdx, dgdy = calc_derivatives(x, y_gd, first_order=True)
+            y_gd = y_gd - alpha_step * dgdy
+
+            term1, term2, term3 = calculate_losses(torch.cat((x, y_gd), 0), f, sizeX, sizeY, calc_derivatives, testID=args.testID, deltaX=dgdy)
+            if toy_example_nc or toy_CS or NN:
+                lossF.append(term1); lossG.append(term2); lossF2.append(lossF2[-1] if len(lossF2) > 0 else 0)
+            else:
+                lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+            if DHC or DHC_LS or NN:
+                pars = (A_tr, B_tr, A_val, B_val, A_test, B_test)
+                train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                        train_loss, val_loss, test_loss, pars, dimY, arch)
+        dfdx, dfdy, dgdx, dgdy = calc_derivatives(x, y, first_order=True)
+        _, _, dgdx2, dgdy2 = calc_derivatives(x, y_gd, first_order=True)
+        with torch.no_grad():
+            x = x - alpha_step * (dfdx + gamma * (dgdx - dgdx2))
+            y = y - alpha_step * (dfdy + gamma * dgdy)
+
+        term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives, testID=args.testID,
+                                                deltaX=torch.cat(((dfdx + gamma * (dgdx - dgdx2)), (dfdy + gamma * dgdy)), 0))
+        lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+        if DHC or DHC_LS or NN:
+            pars = (A_tr, B_tr, A_val, B_val, A_test, B_test)
+            train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
+                                                                                                    train_loss, val_loss, test_loss, pars, dimY, arch)
+        
+    return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
+ 
 
 
 if __name__ == '__main__':
@@ -522,26 +615,25 @@ if __name__ == '__main__':
     torch.manual_seed(0); np.random.seed(0)
     if toy_example or toy_example_nc:
         x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
-        t = torch.linspace(0, 200, 2500)
+        t = torch.linspace(0, 200, 5000)
     elif toy_CS:
         x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
         t = torch.linspace(0, 20, 25000)
     elif DHC or DHC_LS:
         x0 = torch.zeros((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
-        t = torch.linspace(0, 50, 50)
+        t = torch.linspace(0, 50, 10)
     elif NN:
         x0 = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32).to(device)
         t = torch.linspace(0, 0, 500)
 
 
-    # y0, dgdy = solveLL(x0, device=device)
     if toy_example or toy_example_nc or toy_CS:# and 'InversionFree' in [method for method, _, _, _ in scenarios]:
         y0, dgdy = solveLL(x0, device=device)
     else:
         y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32).to(device)
 
 
-    for (method, alpha, epsilon, p, mode) in scenarios:  
+    for (method, alpha, epsilon, p, mode, beta) in scenarios:  
         if DHC or DHC_LS or NN: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY, arch = load_setup(args.testID, p=p, device=device)
         lossF, lossG, lossF2 = [], [], []
         acc, loss = None, None
@@ -589,7 +681,10 @@ if __name__ == '__main__':
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'IFDT':
             lossF, lossG, lossF2, acc, loss = IFDT(x0, y0, alpha, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4)), mode=mode,
-                                                    lossS=(lossF, lossG, lossF2), device=device)
+                                                    lossS=(lossF, lossG, lossF2), beta=beta, device=device)
+            tt = torch.linspace(0, t[-1], lossF.shape[0])
+        elif method == 'VPBGD':
+            lossF, lossG, lossF2, acc, loss = VPBGD(x0, y0, alpha_step=alpha_step / 10, K=np.maximum(1, int(len(t) * 4) // 11), T=10, device=device)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         # elif method == 'TTSA':
         #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
@@ -613,7 +708,10 @@ if __name__ == '__main__':
             if flag_alpha: strLabel = method + r': $\alpha$= ' + str(alpha)
             elif flag_epsilon: strLabel = method + r': $\varepsilon$= ' + str(epsilon)
             elif DHC or DHC_LS or NN: 
-                if method == 'IFDT': strLabel = mode + r': p= ' + str(p)
+                if method == 'IFDT': 
+                    if mode == 'Ours1': strLabel = 'Theorem 4.1'
+                    elif mode == 'Ours2': strLabel = 'Theorem 4.5'
+                    strLabel +=  r': p= ' + str(p)
                 else: strLabel = method + r': p= ' + str(p)
             elif args.scenarioID == 4 or args.scenarioID == 5: strLabel = r'K = ' + str(len(tt) // 10**3) + r" $\times 10^3$"
 
@@ -625,13 +723,26 @@ if __name__ == '__main__':
                     else: strLabel = mode
 
             print('Number of Gradient Calculations:', len(tt), '\n')
-            if 'InversionFree' not in [method for method, _, _, _, _ in scenarios] and \
-                'SecondOrder' not in [method for method, _, _, _, _ in scenarios]:
+            if 'InversionFree' not in [method for method, _, _, _, _, _ in scenarios] and \
+                'SecondOrder' not in [method for method, _, _, _, _, _ in scenarios]:
                 tt = range(len(lossF))
                 t_label = 'iterations'
             else:
                 t_label = 'time'
             
+            if 'MOGD' in [mode for _, _, _, _, mode, _ in scenarios]:
+                try:
+                    axm  # Try accessing axm
+                except NameError:
+                    fign, axn = plt.subplots(1, 1, figsize=(8, 6)) 
+                    fign, axm = plt.subplots(1, 1, figsize=(8, 6)) 
+
+                axn.plot(tt, np.cumsum(lossF2) / np.arange(1, len(lossF2) + 1), label='Average Step: '+ method)
+                axn.set_yscale('log')
+                axn.legend()
+                axm.plot(tt, (lossF + 1) + beta * lossG**2, label='Merit Function: ' + method)
+                axm.set_yscale('log')
+                axm.legend()
             ax1.plot(tt, lossF, label= (strLabel))
             ax11.plot(tt, lossF2, label=(strLabel))
 
@@ -654,7 +765,19 @@ if __name__ == '__main__':
                 ax3.set_ylabel('Test Accuracy')
                 ax3.legend()
 
-                # Plotting loss
+                if False:
+                    # Plotting loss
+                    try:
+                        axtr  # Try accessing axm
+                    except NameError:
+                        fign, axtr = plt.subplots(1, 1, figsize=(8, 6))
+                    axtr.plot(tt, loss[0], label=(strLabel))
+                    axtr.set_xlabel(t_label)
+                    axtr.set_ylabel('Training Loss')
+                    axtr.legend() 
+                    fign.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + 'Loss_tr' + '.pdf', dpi=300,
+                                bbox_inches='tight', pad_inches=0.1)
+
                 ax4.plot(tt, loss[1], label=(strLabel))
                 ax4.set_xlabel(t_label)
                 ax4.set_ylabel('Validation Loss')
@@ -664,13 +787,14 @@ if __name__ == '__main__':
                              bbox_inches='tight', pad_inches=0.1)
                 fig4.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + 'Loss' + '.pdf', dpi=300,
                              bbox_inches='tight', pad_inches=0.1)
+                
             ax1.legend()
             ax1.set_xlabel(t_label)
             ax1.set_ylabel('f(x,y)')
 
             ax11.legend()
             ax11.set_xlabel(t_label)
-            if toy_example_nc or toy_CS or NN:
+            if toy_example_nc or NN:
                 ax11.set_ylabel(r'$\|\Delta x\|$')
             else:
                 ax11.set_ylabel(r'$\|F(x,y)\|$')

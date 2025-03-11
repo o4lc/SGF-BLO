@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import cvxpy as cp
 from setup import myNN
 
 def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss, pars, dimY, arch):
@@ -18,6 +19,7 @@ def add_loss(W, train_accuracy, val_accuracy, test_accuracy, train_loss, val_los
 
 def calculate_accuracy(A, B, W, arch=None):
     if arch is not None: isNN = True
+    else: isNN = False
     with torch.no_grad():
         if isNN:
             predictions = myNN(arch, A, W)
@@ -31,6 +33,7 @@ def calculate_accuracy(A, B, W, arch=None):
 # Helper function to calculate loss
 def calculate_loss(A, B, W, arch=None):
     if arch is not None: isNN = True
+    else: isNN = False
     with torch.no_grad():
         if isNN:
             logits = myNN(arch, A, W)
@@ -44,7 +47,7 @@ def calculate_loss(A, B, W, arch=None):
 def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives, testID=None, deltaX=None):
     # Calculate derivatives
     x, y = sol[:sizeX], sol[sizeX:]
-    if testID not in [0, 3, 4]:
+    if testID not in [0, 2, 3, 4]:
         matrixVectorProduct = True
         non_convex = True
     else:
@@ -99,3 +102,42 @@ def conjugate_gradient(A, b, x0, N):
     return torch.Tensor(x)
 
 
+def cvxpy_QCQP(tot, dh, c, w):
+    tot = tot.detach().cpu().numpy()
+    dh = dh.detach().cpu().numpy()
+    c = c.detach().cpu().numpy()
+
+    z = cp.Variable(tot.shape)
+    # Define the objective function
+    objective = cp.Minimize(0.5 * cp.norm(z + tot, 2) ** 2)
+
+    # Define the constraint
+    dh_T_z = dh.T @ z
+    constraint = [dh_T_z <= c - w * cp.norm(z, 2) ** 2]
+
+    # Define and solve the problem
+    problem = cp.Problem(objective, constraint)
+    problem.solve()
+
+    # # Print results
+    # print("Optimal z:", z.value)
+    # print("Optimal objective value:", problem.value)
+    return z.value, constraint[0].dual_value
+
+
+def cvxpy_MOGD(tot, dh, c, beta):
+    tot = tot.detach().cpu().numpy()
+    dh = dh.detach().cpu().numpy()
+    c = c.detach().cpu().numpy()
+    beta = beta.detach().cpu().numpy()
+
+    z = cp.Variable(tot.shape) 
+    objective = cp.Minimize(0.5 * cp.norm(z + tot, 2)**2) 
+    constraint = [dh.T @ z - c <= 0,]
+                #   tot.T @ z <= s, 
+                #   s <= 0]
+
+    # Define and solve the problem
+    problem = cp.Problem(objective, constraint)
+    problem.solve()
+    return z.value, constraint[0].dual_value
