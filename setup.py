@@ -17,7 +17,7 @@ def get_axs(toy_example=False, toy_CS=False):
 
 def scenario_setup(id):
     '''
-    (name of the method, alpha, epsilon, corropution rate, mode, beta)
+    (name of the method, alpha, epsilon, corropution rate, mode, beta/w)
     '''
     # mode = ['RXGD', 'QCQP', 'Ours1', 'Ours2', 'MO-GD', 'NN'][2]
     if id == 0: #scenarioAlpha
@@ -45,8 +45,18 @@ def scenario_setup(id):
     elif id == 8: #scenarioIFDT SOTA 2
         return [('IFDT', 0.1, 0.1, 0.25, 'Ours1', -1), ('BOME', 0.1, 0.1, 0.25, ' ', -1), ('VPBGD', 0.1, 0.1, 0.25, ' ', -1)]
     # ----------------------------------------
-    elif id == 9: #scenarioTest
-        return [('IFDT', 0.01, 0.01, 0.25, 'QCQP', 0.01)]
+    elif id == 9: #scenarioQCQP w ablation
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01),\
+                 ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 1)]
+    elif id == 10: #scenarioQCQP comparison
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('BOME', 0.1, 0.1, 0.25, ' ', 0.01),\
+                 ('AIDBio', 0.1, 0.1, 0.25, ' ', 0.01), ('VPBGD', 0.1, 0.1, 0.25, ' ', 0.01)]
+    # ----------------------------------------
+    # elif id == 10: #scenarioTest
+    #     return [('IFDT', 0.01, 0.1, 0.25, 'QCQP', -1), ('IFDT', 0.01, 0.1, 0.25, 'Ours1', -1), ('VPBGD', 0.01, 0.1, 0.25, ' ', -1)] 
+    # elif id == 10: #scenarioTest
+    #     return [('IFDT', 0.1, 0.001, 0.25, 'MOGD', 0.1), ('IFDT', 0.1, 0.001, 0.25, 'Ours1', 0.1)] 
+    # [('NLSolver', 0.01, 0.1, 0.25, ' ', 0.01)]
     # , ('VPBGD', 0.01, 0.01, 0.25, ' ', 0.01)] 
                 # ('IFDT', 0.01, 50, 0.25, 'Ours1'), ('BOME', 0.01, 50, 0.25, ' ')]
     # , ('IFDT', 0.5, 0.1, 0.25, 'Ours1')]

@@ -6,5 +6,5 @@
 # --------------------------------
 # scenarioID: Choose from setup.py to run the experiments of the ACC 2025 or ICML 2025 paper
 
-python3 main.py --testID 0 --scenarioID 9
+python3 main.py --testID 0 --scenarioID 10
 

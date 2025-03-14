@@ -106,18 +106,24 @@ def cvxpy_QCQP(tot, dh, c, w):
     tot = tot.detach().cpu().numpy()
     dh = dh.detach().cpu().numpy()
     c = c.detach().cpu().numpy()
+    w = w.detach().cpu().numpy()
 
     z = cp.Variable(tot.shape)
     # Define the objective function
     objective = cp.Minimize(0.5 * cp.norm(z + tot, 2) ** 2)
 
     # Define the constraint
-    dh_T_z = dh.T @ z
-    constraint = [dh_T_z <= c - w * cp.norm(z, 2) ** 2]
+    constraint = [dh.T @ z <= c - w * cp.norm(z, 2) ** 2]
 
     # Define and solve the problem
     problem = cp.Problem(objective, constraint)
-    problem.solve()
+    problem.solve(
+    solver=cp.MOSEK,
+    mosek_params={
+        "MSK_DPAR_INTPNT_CO_TOL_REL_GAP": 1e-8  # set relative gap tolerance
+    }
+)
+
 
     # # Print results
     # print("Optimal z:", z.value)

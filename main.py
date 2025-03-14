@@ -8,49 +8,73 @@ import time
 import torch.nn.functional as F
 from tqdm import tqdm
 from torchviz import make_dot
+from scipy.optimize import minimize
+from cyipopt import minimize_ipopt
+
 
 
 from utilities import conjugate_gradient, add_loss, calculate_losses, cvxpy_QCQP, cvxpy_MOGD
 from setup import load_setup, scenario_setup, get_axs
 
-def LineSearch_merit(deltaX, x, y, tt, lam, beta, alpha, k=-1):
+def LineSearch_merit(deltaX, x, y, tt, lam, beta, alpha, k=-1, dh_old=None):
     assert beta >= lam
-    eta = 0.05
+    zero = torch.Tensor([0]).to(device)
+
+    def merit_func(x, y, grad_g):
+        h = torch.linalg.norm(grad_g, 2)**2 - epsilon**2 
+        merit =  f(x, y) + beta * torch.maximum(zero, h)**2
+        return merit, h
+    
+    def grad_merit(deltaX, df, dh, h):
+        if h > 0:
+            return (df.T @ deltaX + 2 * beta * dh.T @ deltaX * h)
+        else:
+            return (df.T @ deltaX)
+
+    eta = 0.10
     t = tt
-    # if k > 100:
-    #     # print(k)
-    #     t = 0.1
-    #     x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
-    #     return t, x_temp, y_temp
+
     dfdx_old, dfdy_old, _, dgdy_old = calc_derivatives(x, y, matrixVectorProduct=True, first_order=True)
-    h_old = torch.linalg.norm(dgdy_old, 2)**2 
-    E_old =  f(x, y) + beta * h_old
+    df_old = torch.cat((dfdx_old, dfdy_old), 0)
+    E_old, h_old =  merit_func(x, y, dgdy_old)
+    
     while True:
         x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
-        # dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x_temp, y_temp, matrixVectorProduct=False, first_order=False)
-        # dh = 2 * torch.cat((dgdyx.T @ dgdy, dgdyy.T @ dgdy), 0) 
         dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=False, first_order=True)
-        h_temp = torch.linalg.norm(dgdy, 2)**2  
-        E_new = f(x_temp, y_temp) + beta * h_temp
-        # if E_new > E_old - 0.1 * t * (torch.linalg.norm(deltaX, 2)**2 - (beta - lam) * dh.T @ deltaX):
-        if E_new > E_old + eta * t * (-torch.linalg.norm(deltaX, 2)**2 - (beta - lam) * alpha * h_old):
+        E_new, h_new = merit_func(x_temp, y_temp, dgdy)
+        # if torch.linalg.norm(dgdy_old)**2 > epsilon**2:
+        grad = grad_merit(deltaX, df_old, dh_old, h_old)
+        try: assert grad <= 0
+        except: 
+            print(grad, torch.linalg.norm(dgdy_old)**2)
+            raise
+        if E_new > E_old + eta * t * grad:
             t *= 0.5
         else:
             break
-    if k % 100 == 0:
-        print('t=', t, E_new.item(), E_old.item(), '--', h_old.item(), h_temp.item())
+    # else:
+        #     assert (df.T @ deltaX) <= 0
+        #     if E_new > E_old + eta * t * (df.T @ deltaX):
+        #         t *= 0.5
+        #     else:
+        #         break
     return t, x_temp, y_temp
 
-def LineSearch(deltaX, x, y, tt, feasible=True, armijo=True):
+
+def LineSearch(deltaX, x, y, tt, feasible=True, armijo=True, grads=[]):
     t = 10 * tt
-    gamma = 0.01
-    dfdx_old, dfdy_old, _, dgdy_old = calc_derivatives(x, y, matrixVectorProduct=True, first_order=True)
+    gamma = 0.1
+    dfdx_old, dfdy_old, _, dgdy_old = grads
     h_old = torch.linalg.norm(dgdy_old, 2)**2 - epsilon**2
+    num_grad_calcs = 0
     # Feasibility check
     if feasible:
         while True:
             x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
             dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=True, first_order=True)
+            num_grad_calcs += 1
+            # print('--', 't: ', t, 'h- : ', h_old.item(), 
+                #   'h+ : ', (torch.linalg.norm(dgdy, 2)**2).item() - epsilon**2)
             if torch.linalg.norm(dgdy, 2)**2 - epsilon**2 > (1 - gamma) * h_old:
             # if torch.linalg.norm(dgdy, 2)**2 > epsilon**2:
                 t *= 0.5
@@ -60,14 +84,21 @@ def LineSearch(deltaX, x, y, tt, feasible=True, armijo=True):
         while True:
             x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
             dfdx, dfdy, dgdx, dgdy = calc_derivatives(x_temp, y_temp, matrixVectorProduct=True, first_order=True)
+            num_grad_calcs += 1
             # if f(x_temp, y_temp) > f(x, y):
+            try: assert torch.cat((dfdx_old, dfdy_old), 0).T @ deltaX <= 0
+            except: 
+                print(torch.cat((dfdx_old, dfdy_old), 0).T @ deltaX)
+                print(h_old)
+                raise
             if f(x_temp, y_temp) > f(x, y) + 0.1 * t * torch.cat((dfdx_old, dfdy_old), 0).T @ deltaX:
             # if f(x_temp, y_temp) > f(x, y) - 0.1 * t * torch.linalg.norm(deltaX, 2)**2:
                 t *= 0.5
             else:
                 break
-    # print('--', t)
-    return t, x_temp, y_temp
+    t *= 0.5
+    x_temp = x + t * deltaX[:sizeX]; y_temp = y + t * deltaX[sizeX:]
+    return t, x_temp, y_temp, num_grad_calcs
 
 
 def calc_derivatives(x, y, matrixVectorProduct=False, first_order=False):
@@ -264,6 +295,7 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, de
     lossF, lossG, lossF2 = lossS
     train_accuracy, val_accuracy, test_accuracy = [], [], []
     train_loss, val_loss, test_loss = [], [], []
+    t_list = []
     tt = 1
     beta = torch.Tensor([beta]).to(device)
     for k in tqdm(range(K)):
@@ -281,25 +313,29 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, de
         tot = torch.cat((dfdx, dfdy), 0)
         dh = torch.cat((a, b), 0)    
         if mode  == 'QCQP':
-            w = 0.01
+            w = beta
             alpha = K**(-1/3) // 100
-            c = -alpha * -(torch.linalg.norm(dgdy, 2)**2 - epsilon**2)**2
+            c = alpha * (epsilon**2 - torch.linalg.norm(dgdy, 2)**2)
             with torch.no_grad():
-                dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
-                dtotdt = torch.Tensor(dtotdt).to(device)
-                lam = torch.Tensor(lam).to(device)
-                # rad = torch.sqrt(torch.linalg.norm(dh / (2*w))**2 + c / w)
-                # term = torch.linalg.norm(-tot + dh / (2 * w))
-                # if term > rad:
-                #     dtotdt = -dh/(2*w) + rad * (-tot + dh / (2 * w)) / term
-                #     assert torch.allclose(torch.linalg.norm(dtotdt + dh/(2*w)), rad, atol=1e-6)
-                # else:
-                #     dtotdt = -tot
+                if False:
+                    dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
+                    dtotdt = torch.Tensor(dtotdt).to(device)
+                    lam = torch.Tensor(lam).to(device)
+                else:
+                    rad = torch.sqrt(torch.linalg.norm(dh / (2*w))**2 - c / w)
+                    term = torch.linalg.norm(-tot + dh / (2 * w))
+                    if term > rad:
+                        dtotdt = -dh/(2*w) + rad * (-tot + dh / (2 * w)) / term
+                        assert torch.allclose(torch.linalg.norm(dtotdt + dh/(2*w)), rad, atol=1e-6)
+                    else:
+                        dtotdt = -tot
 
                 # # Checking the step!
-                # if False:
-                #     dtotdt_cvxpy = cvxpy_QCQP(tot, dh, c, w)
-                #     assert torch.allclose(dtotdt.detach().cpu().numpy(), dtotdt_cvxpy, atol=1e-5)
+                if False:
+                    dtotdt_cvxpy, lam = cvxpy_QCQP(tot, dh, c, w)
+                    dtotdt_cvxpy = torch.Tensor(dtotdt_cvxpy).to(device)
+                    try: assert torch.allclose(dtotdt, dtotdt_cvxpy, atol=1e-5)
+                    except: print(torch.linalg.norm(dtotdt - dtotdt_cvxpy, 2)); raise
                 # else:
                 #     assert (dh.T @ dtotdt < c - w * torch.linalg.norm(dtotdt, 2)**2) or \
                 #             torch.allclose(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2, atol=1e-1)
@@ -307,28 +343,31 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, de
                 #         assert tot.T @ dtotdt <= 0
                 #     else:
                 #         assert dh.T @ dtotdt <= 0
-            tt, x, y = LineSearch(dtotdt, x, y, tt=0.1)
+            if torch.linalg.norm(dgdy, 2)**2 - epsilon**2 >= -1e-3:
+                x = x + alpha_step * dtotdt[:sizeX]; y = y + alpha_step * dtotdt[sizeX:]
+            else:
+                tt, x, y, num_grad_calc = LineSearch(dtotdt, x, y, tt=0.1, grads=(dfdx, dfdy, dgdx, dgdy))
+                print(num_grad_calc)
+                t_list.append([tt])
+            # tt, x, y = LineSearch_armijo(dtotdt, x, y, tt, w, k)
             
         elif mode == 'MOGD':
-            if k % 1000 == 0:
-                print('==', k, beta)
+            if k % 500 == 0:
                 beta *= 2
+                print('==', k, beta)
             # c = -alpha * torch.linalg.norm(dgdy, 2)**2
-            c = -alpha * torch.linalg.norm(dgdy, 2)**2
+            c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - epsilon**2)
             with torch.no_grad():
                 dtotdt, lam = cvxpy_MOGD(tot, dh, c, beta)
-                # dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
                 dtotdt = torch.Tensor(dtotdt).to(device)
                 lam = torch.Tensor(lam).to(device)
-                # 
+                # lam = ...
                 # dtotdt = -tot - beta * dh
-                lam = 0
-                if k % 100 == 0:
-                    print(torch.linalg.norm(dtotdt, 2), lam)
+
                 if beta < lam:
                     print('beta < lam', beta, lam)
                     beta = lam
-            tt, x, y = LineSearch_merit(dtotdt, x, y, tt=10, lam=lam, beta=beta, alpha=alpha, k=k)
+            tt, x, y = LineSearch_merit(dtotdt, x, y, tt=1, lam=lam, beta=beta, alpha=alpha, k=k, dh_old=dh)
 
 
 
@@ -369,8 +408,6 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, de
                 dxdt = dtotdt[:sizeX]; dydt = dtotdt[sizeX:]
                 x = x + alpha_step_K * dxdt
                 y = y + alpha_step_K * dydt
-
-
         else:
             raise NotImplementedError('Invalid mode')
             # with torch.no_grad():
@@ -397,13 +434,77 @@ def IFDT(x, y, alpha, alpha_step=0.1, K=100, beta=1, mode='RXGD', lossS=None, de
             pars = (A_tr, B_tr, A_val, B_val, A_test, B_test)
             train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss = add_loss(y, train_accuracy, val_accuracy, test_accuracy, 
                                                                                                     train_loss, val_loss, test_loss, pars, dimY, arch)
-        
-
+    if False:
+        plt.figure()
+        plt.plot(t_list)
+        plt.xlabel('Iterations')
+        plt.ylabel('Step size')
+        plt.yscale('log')
     # Convert lists of losses to tensors for easy analysis
     return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
 
 
+def NLSolver(x, y):
+    global A_tr, B_tr, A_val, B_val, A_test, B_test, toy_example, calc_derivatives
+
+    lossF, lossG, lossF2 = [], [], []
+    train_accuracy, val_accuracy, test_accuracy = [], [], []
+    train_loss, val_loss, test_loss = [], [], []
+
+    def objective(z):
+        x = torch.tensor(z[:sizeX], dtype=torch.float, device=device, requires_grad=True)
+        y = torch.tensor(z[sizeX:], dtype=torch.float, device=device, requires_grad=True)
+        return f(x, y).item()
+    
+    def constraint(z):
+        x = torch.tensor(z[:sizeX], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        y = torch.tensor(z[sizeX:], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        dfdx, dfdy, dgdx, dgdy = calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
+        return (torch.linalg.norm(dgdy, 2)**2).item()
+    
+    def gradient(z):
+        x = torch.tensor(z[:sizeX], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        y = torch.tensor(z[sizeX:], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        dfdx, dfdy, dgdx, dgdy = calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
+        # Flatten the gradients to 1D vectors before concatenation:
+        grad_x = dfdx.detach().cpu().numpy().flatten()
+        grad_y = dfdy.detach().cpu().numpy().flatten()
+        concatenated = np.concatenate([grad_x, grad_y])
+        return concatenated
+
+    def constraint_grad(z):
+        x = torch.tensor(z[:sizeX], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        y = torch.tensor(z[sizeX:], dtype=torch.float, device=device, requires_grad=True).unsqueeze(1)
+        dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = calc_derivatives(x, y, matrixVectorProduct=True, first_order=False)
+        # Compute partial gradients for the constraint:
+        grad_x_part = (2 * (dgdyy @ dgdy)).detach().cpu().numpy().flatten()
+        grad_y_part = (2 * (dgdyx.T @ dgdy)).detach().cpu().numpy().flatten()
+        concatenated = np.concatenate([grad_x_part, grad_y_part])
+        return concatenated
+
+
+    constraints = {'type': 'eq', 'fun': constraint, 'jac': constraint_grad}
+    x0 = torch.cat((x, y), 0).detach().cpu().numpy()
+    term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives, testID=args.testID)
+    print('Inital vals', 'f(x, y): ', term1, 'LL loss: ', term2, 'UL loss: ', term3)
+
+    # Solve
+    # result = minimize(objective, x0, method='SLSQP')
+    options = {'ftol': 1e-3, 'eps': 1e-3}
+    result = minimize(objective, x0, method='SLSQP', jac=gradient, constraints=constraints, options=options)
+
+
+    # print(np.linalg.norm(result.x - x0))
+    x, y = torch.Tensor(result.x[:sizeX]).to(device), torch.Tensor(result.x[sizeX:]).to(device)
+    # x, y = torch.Tensor(x0[:sizeX]).to(device), torch.Tensor(x0[sizeX:]).to(device)
+
+    term1, term2, term3 = calculate_losses(torch.cat((x, y), 0), f, sizeX, sizeY, calc_derivatives, testID=args.testID)
+    lossF.append(term1); lossG.append(term2); lossF2.append(term3)
+    print('Success', result.success)
+    print('Final vals', 'f(x, y): ', term1, 'LL loss: ', term2, 'UL loss: ', term3)
+    raise
+    return np.array(lossF), np.array(lossG), np.array(lossF2), (train_accuracy, val_accuracy, test_accuracy), (train_loss, val_loss, test_loss)
 
 
 def TTSA(x, y, alpha=0.1, beta_step=0.1, K=100):
@@ -615,7 +716,7 @@ if __name__ == '__main__':
     torch.manual_seed(0); np.random.seed(0)
     if toy_example or toy_example_nc:
         x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
-        t = torch.linspace(0, 200, 5000)
+        t = torch.linspace(0, 200, 2500)
     elif toy_CS:
         x0 = torch.randn((sizeX, 1), requires_grad=False, dtype=torch.float32).to(device)
         t = torch.linspace(0, 20, 25000)
@@ -624,9 +725,9 @@ if __name__ == '__main__':
         t = torch.linspace(0, 50, 10)
     elif NN:
         x0 = torch.randn((sizeX, 1), requires_grad=True, dtype=torch.float32).to(device)
-        t = torch.linspace(0, 0, 500)
+        t = torch.linspace(0, 0, 50)
 
-
+    # y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32).to(device)
     if toy_example or toy_example_nc or toy_CS:# and 'InversionFree' in [method for method, _, _, _ in scenarios]:
         y0, dgdy = solveLL(x0, device=device)
     else:
@@ -686,6 +787,9 @@ if __name__ == '__main__':
         elif method == 'VPBGD':
             lossF, lossG, lossF2, acc, loss = VPBGD(x0, y0, alpha_step=alpha_step / 10, K=np.maximum(1, int(len(t) * 4) // 11), T=10, device=device)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
+        elif method == 'NLSolver':
+            lossF, lossG, lossF2 = NLSolver(x0, y0)
+            tt = torch.linspace(0, t[-1], lossF.shape[0])
         # elif method == 'TTSA':
         #     lossF, lossG, lossF2, acc, loss = TTSA(x, y0, K=np.maximum(1, int(len(t) * 2)))
         #     tt = torch.linspace(0, t[-1], lossF.shape[0])
@@ -695,22 +799,27 @@ if __name__ == '__main__':
 
         
         with torch.no_grad():
-            flag_method, flag_alpha, flag_epsilon, flag_p = 1, 1, 1, 1
+            flag_method, flag_alpha, flag_epsilon, flag_p, flag_w = 1, 1, 1, 1, 1
             try:
                 if args.scenarioID == 4 or args.scenarioID == 5: pass
                 if scenarios[0][0] == scenarios[1][0]: flag_method = 0
                 if scenarios[0][1] == scenarios[1][1]: flag_alpha = 0
                 if scenarios[0][2] == scenarios[1][2]: flag_epsilon = 0
                 if scenarios[0][3] == scenarios[1][3]: flag_p = 0
+                if scenarios[0][5] == scenarios[1][5]: flag_w = 0
             except:
                 flag_alpha, flag_epsilon, flag_p = 0, 0, 0
 
+            # print(flag_method, flag_alpha, flag_epsilon, flag_p, flag_w)
+            # raise
             if flag_alpha: strLabel = method + r': $\alpha$= ' + str(alpha)
             elif flag_epsilon: strLabel = method + r': $\varepsilon$= ' + str(epsilon)
+            elif flag_w: strLabel = method + r': $w$= ' + str(beta)
             elif DHC or DHC_LS or NN: 
                 if method == 'IFDT': 
                     if mode == 'Ours1': strLabel = 'Theorem 4.1'
                     elif mode == 'Ours2': strLabel = 'Theorem 4.5'
+                    else: strLabel = mode
                     strLabel +=  r': p= ' + str(p)
                 else: strLabel = method + r': p= ' + str(p)
             elif args.scenarioID == 4 or args.scenarioID == 5: strLabel = r'K = ' + str(len(tt) // 10**3) + r" $\times 10^3$"
