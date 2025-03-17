@@ -46,12 +46,12 @@ def scenario_setup(id):
         return [('IFDT', 0.1, 0.1, 0.25, 'Ours1', -1), ('BOME', 0.1, 0.1, 0.25, ' ', -1), ('VPBGD', 0.1, 0.1, 0.25, ' ', -1)]
     # ----------------------------------------
     elif id == 9: #scenarioQCQP w ablation
-        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01),\
-                 ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 1)]
-    elif id == 10: #scenarioQCQP comparison
-        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('BOME', 0.1, 0.1, 0.25, ' ', 0.01),\
-                 ('AIDBio', 0.1, 0.1, 0.25, ' ', 0.01), ('VPBGD', 0.1, 0.1, 0.25, ' ', 0.01)]
-    # ----------------------------------------
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
+    elif id == 10: #scenarioQCQP comparison for convex
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('AIDBio', 0.1, 0.1, 0.25, ' ', 0.01)]
+    elif id == 11: #scenarioQCQP comparison for Large Scale
+        p = 0.25
+        return [('IFDT', 0.1, 0.5, p, 'QCQP', 0.001), ('BOME', 0.1, 0.5, p, ' ', 0.001), ('VPBGD', 0.1, 0.5, p, ' ', 0.001)]
     # elif id == 10: #scenarioTest
     #     return [('IFDT', 0.01, 0.1, 0.25, 'QCQP', -1), ('IFDT', 0.01, 0.1, 0.25, 'Ours1', -1), ('VPBGD', 0.01, 0.1, 0.25, ' ', -1)] 
     # elif id == 10: #scenarioTest
