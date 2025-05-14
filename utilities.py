@@ -47,7 +47,7 @@ def calculate_loss(A, B, W, arch=None):
 def calculate_losses(sol, f, sizeX, sizeY, calc_derivatives, testID=None, deltaX=None):
     # Calculate derivatives
     x, y = sol[:sizeX], sol[sizeX:]
-    if testID not in [0, 2, 3, 4]:
+    if testID not in [0, 2, 3, 4, 5]:
         matrixVectorProduct = True
         non_convex = True
     else:

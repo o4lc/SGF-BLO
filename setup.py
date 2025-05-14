@@ -52,6 +52,9 @@ def scenario_setup(id):
     elif id == 11: #scenarioQCQP comparison for Large Scale
         p = 0.25
         return [('IFDT', 0.1, 0.5, p, 'QCQP', 0.001), ('BOME', 0.1, 0.5, p, ' ', 0.001), ('VPBGD', 0.1, 0.5, p, ' ', 0.001)]
+    # ----------------------------------------
+    elif id == 12: #scenarioQCQP log barrier
+        return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
     # elif id == 10: #scenarioTest
     #     return [('IFDT', 0.01, 0.1, 0.25, 'QCQP', -1), ('IFDT', 0.01, 0.1, 0.25, 'Ours1', -1), ('VPBGD', 0.01, 0.1, 0.25, ' ', -1)] 
     # elif id == 10: #scenarioTest
@@ -67,8 +70,7 @@ def scenario_setup(id):
 def load_setup(testID=0, p=None, device=None):
     if device is None:
         raise ValueError('Device not specified')
-    
-    if testID == 0 or testID == 1:
+    if testID in [0, 1, 2]:
         # Toy example
         c = torch.load('data/c.pt', weights_only=True).to(device)
         d = torch.load('data/d.pt', weights_only=True).to(device)
@@ -85,14 +87,20 @@ def load_setup(testID=0, p=None, device=None):
             def g(x, y):
                 x = x.reshape(dimX); y = y.reshape(dimY)
                 return 0.5 * torch.linalg.norm(H@y - x)**2
-        else:
+        elif testID == 1:
             def g(x, y):
                 x = x.reshape(dimX); y = y.reshape(dimY)
                 return torch.cos(0.5 * torch.linalg.norm(H@y - x)**2)
+        elif testID == 2:
+            def g(x, y):
+                x = x.reshape(dimX); y = y.reshape(dimY)
+                return 0.5 * torch.linalg.norm(H@y - x)**2 - torch.log(y).sum().reshape(1, 1) / 10
+        else:
+            raise ValueError('Invalid test case ID')
     
         return f, g, c, d, A, H, dimX, dimY
     
-    elif testID == 2:
+    elif testID == 3:
         # Toy Coreset selection
         y_tilde = torch.Tensor([[3], [-2]]).to(device)
         X = torch.Tensor([[1, 3], [3, 1], [-2, 2], [-3, 2]]).to(device)
@@ -109,7 +117,7 @@ def load_setup(testID=0, p=None, device=None):
         return f, g, y_tilde, X, dimX, dimY
 
     
-    elif testID == 3 or testID == 4 or testID == 5:
+    elif testID in [4, 5, 6]:
         arch = None
         # DHC with PCA and without PCA
         if testID == 3:

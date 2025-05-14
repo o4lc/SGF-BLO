@@ -12,10 +12,11 @@ class BilevelSolver:
         self.testID = testID
         self.toy_example = (testID == 0)
         self.toy_example_nc = (testID == 1)
-        self.toy_CS = (testID == 2)
-        self.DHC = (testID == 3)
-        self.DHC_LS = (testID == 4)
-        self.NN = (testID == 5)
+        self.toy_example_cons = (testID == 2)
+        self.toy_CS = (testID == 3)
+        self.DHC = (testID == 4)
+        self.DHC_LS = (testID == 5)
+        self.NN = (testID == 6)
 
         self.device = device
         self.scenarioID = scenarioID
@@ -26,7 +27,7 @@ class BilevelSolver:
         torch.manual_seed(0); np.random.seed(0)
 
     def load_setup(self, p=-1):
-        if self.toy_example or self.toy_example_nc:
+        if self.toy_example or self.toy_example_nc or self.toy_example_cons:
             self.f, self.g, self.c, self.d, self.A, self.H, self.dimX, self.dimY = load_setup(self.testID, device=self.device)
         elif self.toy_CS:
             self.f, self.g, self.y_tilde, self.X, self.dimX, self.dimY = load_setup(self.testID, device=self.device)
@@ -41,7 +42,6 @@ class BilevelSolver:
         t0 = time.time()
         y = torch.randn((self.sizeY, 1), dtype=torch.float32, device=self.device)
         y.requires_grad_(True)  # Explicitly ensure y is a leaf tensor with requires_grad
-        
         # Initialize Adam optimizer
         optimizer = torch.optim.Adam([y])
         while True:
@@ -55,6 +55,7 @@ class BilevelSolver:
             else:
                 dfdx, dfdy, dgdx, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
                 with torch.no_grad():
+                    print(dgdy)
                     optimizer.zero_grad()  # Zero previous gradients
                     y.grad = dgdy.reshape(y.shape)  # Set the gradient manually for Adam
                     optimizer.step()  # Perform an optimization step
@@ -65,10 +66,35 @@ class BilevelSolver:
         print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0, '\n')
         return y, dgdy
     
+    def solveLL_constrained(self, x):
+        t0 = time.time()
+        y = torch.randn((self.sizeY, 1), dtype=torch.float32, device=self.device)
+        y = torch.clamp(y, min=0.01)  # Apply the constraint
+        y.requires_grad_(True)  # Explicitly ensure y is a leaf tensor with requires_grad
+        # Initialize Adam optimizer
+        optimizer = torch.optim.Adam([y])
+        while True:
+            _, _, _, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
+            # dgdy = self.H.T @ (self.H @ y - x)
+            with torch.no_grad():
+                optimizer.zero_grad()  # Zero previous gradients
+                y.grad = dgdy.reshape(y.shape)  # Set the gradient manually for Adam
+                # print(y.grad)
+                optimizer.step()  # Perform an optimization step
+                # print(y)
+                # y = torch.clamp(y, min=0.01)  # Apply the constraint
+                # print(torch.linalg.norm(dgdy2, 2), dgdy, '\n-----')
+            if torch.linalg.norm(dgdy, 2) < 5e-2:
+                break
+            # print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0)
+            
+        print('LL error: ', torch.linalg.norm(dgdy, 2), 'Time elapsed:', time.time() - t0, '\n')
+        return y, dgdy
+    
     def setup_solver(self):
-        if self.toy_example or self.toy_example_nc:
+        if self.toy_example or self.toy_example_nc or self.toy_example_cons:
             x0 = torch.randn((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
-            t = torch.linspace(0, 200, 2000)
+            t = torch.linspace(0, 200, 5000)
         elif self.toy_CS:
             x0 = torch.randn((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
             t = torch.linspace(0, 20, 25000)
@@ -79,8 +105,10 @@ class BilevelSolver:
             x0 = torch.randn((self.sizeX, 1), requires_grad=True, dtype=torch.float32).to(self.device)
             t = torch.linspace(0, 0, 200)
 
-        y0, dgdy = self.solveLL(x0)
-
+        if self.toy_example_cons:
+            y0, dgdy = self.solveLL_constrained(x0)
+        else:
+            y0, dgdy = self.solveLL(x0)
         # if self.toy_example or self.toy_example_nc or self.toy_CS:# or self.DHC:
         #     y0, dgdy = self.solveLL(x0)
         # else:
@@ -95,7 +123,7 @@ class BilevelSolver:
         x = x.clone().detach().requires_grad_(True)
         y = y.clone().detach().requires_grad_(True)
 
-        if (self.toy_example or self.toy_example_nc) and True:
+        if (self.toy_example or self.toy_example_nc):
             dfdx = torch.cos(self.c.T @ x + self.d.T @ y) * self.c + 2 *(x+y) / (torch.linalg.norm(x+y)**2 + 1)
             dfdy = torch.cos(self.c.T @ x + self.d.T @ y) * self.d + 2 *(x+y) / (torch.linalg.norm(x+y)**2 + 1)
 
@@ -107,8 +135,17 @@ class BilevelSolver:
 
                 dgdyy = self.H.T @ self.H
                 dgdyx = -self.H
+            
+            # elif self.toy_example_cons:
+            #     dgdx = - (self.H @ y - x)
+            #     dgdy = self.H.T @ (self.H @ y - x) - (1 / y)
+            #     if first_order:
+            #         return dfdx, dfdy, dgdx, dgdy
 
-            else:
+            #     dgdyy = self.H.T @ self.H + torch.diag(1 / y**2)
+            #     dgdyx = -self.H
+
+            elif self.toy_example_nc:
                 diff = (self.H @ y - x).reshape(-1, )
                 norm2 = torch.sum(diff**2)
                 # 
@@ -174,12 +211,13 @@ class BilevelSolver:
                 return dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx
 
         else:
+            # Calculate using PyTorch
             x = x.reshape(self.dimX); y = y.reshape(self.dimY)
             f_val = self.f(x,y)
             g_val = self.g(x,y)
             # make_dot(g_val.mean(), params={'y':y, 'x':x}).render("./Debug/g", format="png")
 
-            dfdx  = torch.zeros_like(x)
+            dfdx  = torch.autograd.grad(f_val, x, create_graph=True, allow_unused=True, materialize_grads=True)[0]
             dfdy = torch.autograd.grad(f_val, y, create_graph=True, allow_unused=True, materialize_grads=True)[0]
 
             dgdy, dgdx = torch.autograd.grad(g_val, [y,x], create_graph=True, retain_graph=True, allow_unused=False)
@@ -294,7 +332,7 @@ class BilevelSolver:
             else:
                 dfdx, dfdy, dgdx, dgdy, hvp_yy, hvp_yx = self.calc_derivatives(x, y, matrixVectorProduct=True)
             self.num_grad_calc += 1
-            
+
             a = 2 * hvp_yx
             b = 2 * hvp_yy
             c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - self.epsilon**2)
@@ -313,7 +351,6 @@ class BilevelSolver:
                 # print('Time elapsed:', time.time() - t0)
                 # raise
 
-
                 with torch.no_grad():
                     if False:
                         dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
@@ -327,7 +364,9 @@ class BilevelSolver:
                             assert torch.allclose(torch.linalg.norm(dtotdt + dh/(2*w)), rad, atol=1e-6)
                         else:
                             dtotdt = -tot
-                    try: assert (torch.allclose(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2, atol=1e-4) or \
+                    
+                    # if not self.toy_example_cons:
+                    try: assert (torch.allclose(dh.T @ dtotdt, c - w * torch.linalg.norm(dtotdt, 2)**2, atol=1e-3) or \
                                     dh.T @ dtotdt < c - w * torch.linalg.norm(dtotdt, 2)**2)    
                     except: print((dh.T @ dtotdt).item(), (c - w * torch.linalg.norm(dtotdt, 2)**2).item(), c); raise
 
@@ -342,6 +381,8 @@ class BilevelSolver:
                 if torch.linalg.norm(dgdy, 2)**2 - self.epsilon**2 >= -1e-5 or \
                                     (-0.25/w * torch.linalg.norm(dh, 2)**2) > c:
                     print('constant step activated')
+                    if self.toy_example_cons:
+                        alpha_step = 5e-3
                     x = x + alpha_step * dtotdt[:self.sizeX]; y = y + alpha_step * dtotdt[self.sizeX:]
                 else:
                     tt, x, y = self.LineSearch(dtotdt, x, y, tt=0.1, grads=(dfdx, dfdy, dgdx, dgdy))

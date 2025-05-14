@@ -86,10 +86,11 @@ if __name__ == '__main__':
     # 
     toy_example = (args.testID == 0)
     toy_example_nc = (args.testID == 1)
-    toy_CS = (args.testID == 2)
-    DHC = (args.testID == 3)
-    DHC_LS = (args.testID == 4)
-    NN = (args.testID == 5)
+    toy_example_cons = (args.testID == 2)
+    toy_CS = (args.testID == 3)
+    DHC = (args.testID == 4)
+    DHC_LS = (args.testID == 5)
+    NN = (args.testID == 6)
 
 
     plt.rcParams.update({
@@ -101,8 +102,8 @@ if __name__ == '__main__':
     'ps.fonttype': 42
 })
 
-    if toy_example or toy_example_nc:
-        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc)
+    if toy_example or toy_example_nc or toy_example_cons:
+        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc or toy_example_cons)
     elif toy_CS:
         fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_CS=toy_CS)
     else:
@@ -171,11 +172,12 @@ if __name__ == '__main__':
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'AIDBio':
             if toy_example_nc: alpha_step = 0.01
+            elif toy_example_cons: alpha_step = 0.05
             lossF, lossG, lossF2, acc, loss = solver.AIDBio(x0, y0, alpha_step=alpha_step, beta_step=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'BOME':
-            if toy_example: alpha_step = 0.1
-            elif toy_example_nc: alpha_step = 0.1
+            if toy_example or toy_example_nc: alpha_step = 0.1
+            elif toy_example_cons: alpha_step = 0.005
             elif toy_CS: alpha_step *= 0.1
             elif DHC or DHC_LS: alpha_step = 1
             else: alpha_step = 0.1
@@ -184,6 +186,7 @@ if __name__ == '__main__':
         elif method == 'VPBGD':
             if toy_example: alpha_step = 0.01
             elif toy_example_nc: alpha_step = 0.1
+            elif toy_example_cons: alpha_step = 0.1
             elif DHC or DHC_LS: alpha_step = 1
             else: alpha_step = 0.1
 
@@ -319,11 +322,11 @@ if __name__ == '__main__':
             # plt.tight_layout()
             scenarioItems = ['method', 'alpha', 'epsilon']
             item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            fig1.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
+            fig1.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
                           dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig11.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
+            fig11.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
                            dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig2.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
+            fig2.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
                           dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
