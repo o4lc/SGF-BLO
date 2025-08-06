@@ -19,31 +19,31 @@ def scenario_setup(id):
     '''
     (name of the method, alpha, epsilon, corropution rate, mode, beta/w)
     '''
-    # mode = ['RXGD', 'QCQP', 'Ours1', 'Ours2', 'MO-GD', 'NN'][2]
+    # mode = ['RXGD', 'QCQP', 'QP1', 'QP2', 'MO-GD', 'NN']
     if id == 0: #scenarioAlpha
-        return [('InversionFree', 0.01, 0.1, None, None), ('InversionFree', 0.05, 0.1, None, None), 
-                 ('InversionFree', 0.1, 0.1, None, None), ('InversionFree', 0.5, 0.1, None, None), 
-                 ('InversionFree', 1, 0.1, None, None)]
+        return [('IFCT', 0.01, 0.1, None, None, None), ('IFCT', 0.05, 0.1, None, None, None), 
+                 ('IFCT', 0.1, 0.1, None, None, None), ('IFCT', 0.5, 0.1, None, None, None), 
+                 ('IFCT', 1, 0.1, None, None, None)]
     elif id == 1: #scenarioEps
-        return [('InversionFree', 0.1, 0.05, None, None), ('InversionFree', 0.1, 0.1, None, None),
-                ('InversionFree', 0.1, 0.2, None, None), ('InversionFree', 0.1, 0.5, None, None)]
+        return [('IFCT', 0.1, 0.05, None, None, None), ('IFCT', 0.1, 0.1, None, None, None),
+                ('IFCT', 0.1, 0.2, None, None, None), ('IFCT', 0.1, 0.5, None, None, None)]
     elif id == 2: #scenarioOthers
-        return [('InversionFree', 0.1, 0.1, 0.25, None), ('AIDBio', 0.1, 0.1, 0.25, None),
-                ('InversionFree', 0.1, 0.1, 0.4, None), ('AIDBio', 0.1, 0.1, 0.4, None)]
+        return [('IFCT', 0.1, 0.1, 0.25, None, None), ('AIDBio', 0.1, 0.1, 0.25, None, None),
+                ('IFCT', 0.1, 0.1, 0.4, None, None), ('AIDBio', 0.1, 0.1, 0.4, None, None)]
     # ----------------------------------------
     elif id == 3: #scenario2ndOrder
-        return [('SecondOrder', 0.1, None, None, None), ('STABLE', 0.1, None, None, None)]
+        return [('SecondOrder', 0.1, None, None, None, None, None), ('STABLE', 0.1, None, None, None, None, None)]
     # ----------------------------------------
     elif id == 4: #scenarioIFDT-K ablation
-        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, -1, 'Ours1'), ('IFDT', 0.1, 0.1, -2, 'Ours1')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, -1, 'QP1'), ('IFDT', 0.1, 0.1, -2, 'QP1')]
     elif id == 5: #scenarioIFDT-K ablation
-        return [('IFDT', 0.1, 0.1, 0, 'Ours2'), ('IFDT', 0.1, 0.1, -1, 'Ours2'), ('IFDT', 0.1, 0.1, -2, 'Ours2')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP2'), ('IFDT', 0.1, 0.1, -1, 'QP2'), ('IFDT', 0.1, 0.1, -2, 'QP2')]
     elif id == 6: #scenarioIFDT SOTA
-        return [('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, 0, 'Ours2'), ('BOME', 0.1, 0.1, 0, ' ')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, 0, 'QP2'), ('BOME', 0.1, 0.1, 0, ' ')]
     elif id == 7: #scenarioIFDT SOTA 2
-        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' '), ('IFDT', 0.1, 0.1, 0, 'Ours1'), ('IFDT', 0.1, 0.1, 0, 'Ours2')]
+        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' '), ('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, 0, 'QP2')]
     elif id == 8: #scenarioIFDT SOTA 2
-        return [('IFDT', 0.1, 0.1, 0.25, 'Ours1', -1), ('BOME', 0.1, 0.1, 0.25, ' ', -1), ('VPBGD', 0.1, 0.1, 0.25, ' ', -1)]
+        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', -1), ('BOME', 0.1, 0.1, 0.25, ' ', -1), ('VPBGD', 0.1, 0.1, 0.25, ' ', -1)]
     # ----------------------------------------
     elif id == 9: #scenarioQCQP w ablation
         return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
@@ -56,15 +56,15 @@ def scenario_setup(id):
     elif id == 12: #scenarioQCQP log barrier
         return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
     # elif id == 10: #scenarioTest
-    #     return [('IFDT', 0.01, 0.1, 0.25, 'QCQP', -1), ('IFDT', 0.01, 0.1, 0.25, 'Ours1', -1), ('VPBGD', 0.01, 0.1, 0.25, ' ', -1)] 
+    #     return [('IFDT', 0.01, 0.1, 0.25, 'QCQP', -1), ('IFDT', 0.01, 0.1, 0.25, 'QP1', -1), ('VPBGD', 0.01, 0.1, 0.25, ' ', -1)] 
     # elif id == 10: #scenarioTest
-    #     return [('IFDT', 0.1, 0.001, 0.25, 'MOGD', 0.1), ('IFDT', 0.1, 0.001, 0.25, 'Ours1', 0.1)] 
+    #     return [('IFDT', 0.1, 0.001, 0.25, 'MOGD', 0.1), ('IFDT', 0.1, 0.001, 0.25, 'QP1', 0.1)] 
     # [('NLSolver', 0.01, 0.1, 0.25, ' ', 0.01)]
     # , ('VPBGD', 0.01, 0.01, 0.25, ' ', 0.01)] 
-                # ('IFDT', 0.01, 50, 0.25, 'Ours1'), ('BOME', 0.01, 50, 0.25, ' ')]
-    # , ('IFDT', 0.5, 0.1, 0.25, 'Ours1')]
+                # ('IFDT', 0.01, 50, 0.25, 'QP1'), ('BOME', 0.01, 50, 0.25, ' ')]
+    # , ('IFDT', 0.5, 0.1, 0.25, 'QP1')]
     else:
-         return [('InversionFree', 0.01, 0.1, None)]
+         return [('IFCT', 0.01, 0.1, None)]
 
     
 def load_setup(testID=0, p=None, device=None):

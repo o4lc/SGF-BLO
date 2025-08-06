@@ -9,7 +9,7 @@ import time
 from tqdm import tqdm
 from torchviz import make_dot
 from scipy.optimize import minimize
-from cyipopt import minimize_ipopt
+# from cyipopt import minimize_ipopt
 
 
 from bilevel_solver import BilevelSolver
@@ -22,16 +22,17 @@ def system(t, variables):
     global dxdt #Because its previous value is required in ProjectMethod 1
     progress_bar.update(1)
 
-    if (method == 'InversionFree') and not toy_example:
-        dfdx, dfdy, dgdx, dgdy, hessian_vector_product, dgdyx = solver.calc_derivatives(x, y, matrixVectorProduct=True)
+    if (method == 'IFCT') and not toy_example:
+        dfdx, dfdy, dgdx, dgdy, hvp_yy, hvp_yx = solver.calc_derivatives(x, y, matrixVectorProduct=True)
     else:
         dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = solver.calc_derivatives(x, y, matrixVectorProduct=False)
-        hessian_vector_product = dgdyy.T @ dgdy
+        hvp_yy = dgdyy.T @ dgdy
+        hvp_yx = dgdyx.T @ dgdy
 
     with torch.no_grad():    
-        if method == 'InversionFree':
-            a = 2 * dgdyx.T @ dgdy
-            b = 2 * hessian_vector_product
+        if method == 'IFCT':
+            a = 2 * hvp_yx
+            b = 2 * hvp_yy
             c = -alpha * (torch.linalg.norm(dgdy, 2)**2 - epsilon**2)
             ab = torch.cat((a, b), 0)
 
@@ -141,7 +142,7 @@ if __name__ == '__main__':
 
         t1 = time.time()
         # continuous time methods
-        if method in ['InversionFree', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
+        if method in ['IFCT', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
             initial_conditions = torch.cat((x0, y0), 0)
             progress_bar = tqdm(total= 4 * len(t))
             solution = torchdiffeq.odeint(system, initial_conditions, t, method='rk4')
@@ -222,8 +223,8 @@ if __name__ == '__main__':
             elif flag_w: strLabel = r'$w$= ' + str(beta)
             elif DHC or DHC_LS or NN: 
                 if method == 'IFDT': 
-                    if mode == 'Ours1': strLabel = 'Theorem 4.1'
-                    elif mode == 'Ours2': strLabel = 'Theorem 4.5'
+                    if mode == 'QP1': strLabel = 'Theorem 4.1'
+                    elif mode == 'QP2': strLabel = 'Theorem 4.5'
                     else: strLabel = mode
                     strLabel +=  r': p= ' + str(p)
                 else: strLabel = method + r': p= ' + str(p)
@@ -232,12 +233,12 @@ if __name__ == '__main__':
             else:
                 if method != 'IFDT': strLabel = method
                 else:
-                    if mode == 'Ours1': strLabel = 'Theorem 4.1'
-                    elif mode == 'Ours2': strLabel = 'Theorem 4.5'
+                    if mode == 'QP1': strLabel = 'Theorem 4.1'
+                    elif mode == 'QP2': strLabel = 'Theorem 4.5'
                     else: strLabel = mode
 
             print('Number of Gradient Calculations:', len(tt), '\n')
-            if 'InversionFree' not in [method for method, _, _, _, _, _ in scenarios] and \
+            if 'IFCT' not in [method for method, _, _, _, _, _ in scenarios] and \
                 'SecondOrder' not in [method for method, _, _, _, _, _ in scenarios]:
                 tt = range(len(lossF))
                 t_label = 'iterations'

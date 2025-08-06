@@ -55,7 +55,7 @@ class BilevelSolver:
             else:
                 dfdx, dfdy, dgdx, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
                 with torch.no_grad():
-                    print(dgdy)
+                    print(torch.linalg.norm(dgdy))
                     optimizer.zero_grad()  # Zero previous gradients
                     y.grad = dgdy.reshape(y.shape)  # Set the gradient manually for Adam
                     optimizer.step()  # Perform an optimization step
@@ -94,7 +94,7 @@ class BilevelSolver:
     def setup_solver(self):
         if self.toy_example or self.toy_example_nc or self.toy_example_cons:
             x0 = torch.randn((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
-            t = torch.linspace(0, 200, 5000)
+            t = torch.linspace(0, 200, 10000)
         elif self.toy_CS:
             x0 = torch.randn((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
             t = torch.linspace(0, 20, 25000)

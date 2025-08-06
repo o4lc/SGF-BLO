@@ -77,7 +77,7 @@ def constrained_system(t, variables):
 
     dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx, dLdz, dLdzx, dLdzz = calc_derivatives(x, y, lamb)
     with torch.no_grad():    
-        if method == 'InversionFree':
+        if method == 'IFCT':
             a = 2 * dLdzx.T @ dLdz
             b = 2 * dLdzz @ dLdz
             c = -alpha * (torch.linalg.norm(dLdz, 2)**2 - epsilon**2)
@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
         if not toy_example: f, g, A_tr, B_tr, A_val, B_val, A_test, B_test, dimX, dimY = load_setup(toy_example, p=p)
         calc_derivatives = calc_derivatives_analytic
-        if toy_example and 'InversionFree' in [method for method, _, _, _ in scenarios]:
+        if toy_example and 'IFCT' in [method for method, _, _, _ in scenarios]:
             y0, lambda0, dgdy = solveLL_constrained(x, H_cons, A_cons)
         else:
             y0 = torch.randn((sizeY, 1), requires_grad=True, dtype=torch.float32)
@@ -159,7 +159,7 @@ if __name__ == '__main__':
         # -----------------------------------------------------------------
         print('-- Method:', method, 'Alpha:', alpha, 'Epsilon:', epsilon)
         t1 = time.time()
-        if method in ['InversionFree', 'STABLE'] or 'SecondOrder' in method:
+        if method in ['IFCT', 'STABLE'] or 'SecondOrder' in method:
             initial_conditions = torch.cat((x, y0, lambda0), 0)
             progress_bar = tqdm(total= 4 * len(t))
             solution = torchdiffeq.odeint(constrained_system, initial_conditions, t, method='rk4')
