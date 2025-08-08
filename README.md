@@ -23,9 +23,9 @@ You can also choose from the following problems:
 - `DHC` denotes the small scale data hyper cleaning (DHC) problem, and `DHC_LS` denotes the large scale DHC.
 - `NN` denotes the DHC problem with a neural network classifier.
 
-The `BilevelSolver` class in `bilevel_solver.py` containts the implementations of our methods, and the state-of-the-art methods that we comapre with. You can also find the code for calculating the function definitions for `f` and `g`, and their derivatives in the same file. 
+The `BilevelSolver` class in `bilevel_solver.py` containts the implementations of our methods, and the state-of-the-art methods that we comapre with. You can also find the code for calculating the function definitions for `f()` and `g()`, and their derivatives in the same file. 
 
-You can modify the configurations based on your experiment. To add experiment with new parameters or method, you can change the `scenario_setup()` function in `setup.py`.
+You can modify the configurations based on your experiment. To add experiment with new parameters or method, you can change the `scenario_setup()` function in `setup.py`. Note that some hyperparameters (e.g., the step sizes) might have to be fine tuned to result in the best performance of the methods if the setup is changed.
 
 ## Citation
 If you use this code in your work or found this repository usefull, please cite our papers:

@@ -7,8 +7,8 @@ import argparse
 import time
 
 from tqdm import tqdm
-from torchviz import make_dot
-from scipy.optimize import minimize
+# from torchviz import make_dot
+# from scipy.optimize import minimize
 # from cyipopt import minimize_ipopt
 
 
@@ -177,7 +177,7 @@ if __name__ == '__main__':
             lossF, lossG, lossF2, acc, loss = solver.AIDBio(x0, y0, alpha_step=alpha_step, beta_step=0.01, K=np.maximum(1, int(len(t) * 4 / 11)), D=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'BOME':
-            if toy_example or toy_example_nc: alpha_step = 0.1
+            if toy_example or toy_example_nc: alpha_step = 0.05
             elif toy_example_cons: alpha_step = 0.005
             elif toy_CS: alpha_step *= 0.1
             elif DHC or DHC_LS: alpha_step = 1

@@ -55,7 +55,7 @@ class BilevelSolver:
             else:
                 dfdx, dfdy, dgdx, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
                 with torch.no_grad():
-                    print(torch.linalg.norm(dgdy))
+                    # print(torch.linalg.norm(dgdy))
                     optimizer.zero_grad()  # Zero previous gradients
                     y.grad = dgdy.reshape(y.shape)  # Set the gradient manually for Adam
                     optimizer.step()  # Perform an optimization step
@@ -322,7 +322,8 @@ class BilevelSolver:
         train_loss, val_loss, test_loss = [], [], []
         t_list = []
         tt = 1
-        beta = torch.Tensor([beta]).to(self.device)
+        if beta is not None:
+            beta = torch.Tensor([beta]).to(self.device)
         for k in tqdm(range(K)):
             # Calculate derivatives for current x and y
             if self.toy_example or self.toy_example_nc or self.toy_CS:
@@ -340,17 +341,6 @@ class BilevelSolver:
             dh = torch.cat((a, b), 0)    
             if mode  == 'QCQP':
                 w = beta
-                # t0 = time.time()
-                # for i in range(10000):
-                #     dfdx, dfdy, dgdx, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=True, first_order=True)
-                # print('Time elapsed:', time.time() - t0)
-
-                # t0 = time.time()
-                # for i in range(10000):
-                #     dfdx, dfdy, dgdx, dgdy, xx, yy = self.calc_derivatives(x, y, matrixVectorProduct=True, first_order=False)
-                # print('Time elapsed:', time.time() - t0)
-                # raise
-
                 with torch.no_grad():
                     if False:
                         dtotdt, lam = cvxpy_QCQP(tot, dh, c, w)
@@ -418,11 +408,11 @@ class BilevelSolver:
                         y = y + alpha_step * dydt
 
 
-            elif 'Ours' in mode:
+            elif mode in ['QP1', 'QP2']:
                 with torch.no_grad():
                     if mode[-1] == '1':
                         # K^-1/3 ~ 0.001
-                        if self.toy_example or self.toy_example_nc: alpha_K = K**(-1/3); alpha_step_K = K**(-1/3)
+                        if self.toy_example or self.toy_example_nc: alpha_K = 1.5 * K**(-1/3); alpha_step_K = 1.5 * K**(-1/3)
                         elif self.toy_CS: alpha_K = 0.1 * K**(-1/3); alpha_step_K = 0.1 * K**(-1/3)
                         else: alpha_K = 5 * K**(-1/3); alpha_step_K = 5 * K**(-1/3)
                         cprime = alpha_K * (torch.linalg.norm(dh, 2)**2)

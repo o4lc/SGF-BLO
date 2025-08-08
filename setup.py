@@ -35,15 +35,15 @@ def scenario_setup(id):
         return [('SecondOrder', 0.1, None, None, None, None, None), ('STABLE', 0.1, None, None, None, None, None)]
     # ----------------------------------------
     elif id == 4: #scenarioIFDT-K ablation
-        return [('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, -1, 'QP1'), ('IFDT', 0.1, 0.1, -2, 'QP1')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, -1, 'QP1', None), ('IFDT', 0.1, 0.1, -2, 'QP1', None)]
     elif id == 5: #scenarioIFDT-K ablation
-        return [('IFDT', 0.1, 0.1, 0, 'QP2'), ('IFDT', 0.1, 0.1, -1, 'QP2'), ('IFDT', 0.1, 0.1, -2, 'QP2')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP2', None), ('IFDT', 0.1, 0.1, -1, 'QP2', None), ('IFDT', 0.1, 0.1, -2, 'QP2', None)]
     elif id == 6: #scenarioIFDT SOTA
-        return [('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, 0, 'QP2'), ('BOME', 0.1, 0.1, 0, ' ')]
+        return [('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, 0, 'QP2', None), ('BOME', 0.1, 0.1, 0, None, None)]
     elif id == 7: #scenarioIFDT SOTA 2
-        return [('BOME', 0.1, 0.1, 0, ' '), ('AIDBio', 0.1, 0.1, 0, ' '), ('IFDT', 0.1, 0.1, 0, 'QP1'), ('IFDT', 0.1, 0.1, 0, 'QP2')]
-    elif id == 8: #scenarioIFDT SOTA 2
-        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', -1), ('BOME', 0.1, 0.1, 0.25, ' ', -1), ('VPBGD', 0.1, 0.1, 0.25, ' ', -1)]
+        return [('BOME', 0.1, 0.1, 0, None, None), ('AIDBio', 0.1, 0.1, 0, None, None), ('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, 0, 'QP2', None)]
+    elif id == 8: #scenarioIFDT SOTA 3
+        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', None), ('BOME', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
     # ----------------------------------------
     elif id == 9: #scenarioQCQP w ablation
         return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
