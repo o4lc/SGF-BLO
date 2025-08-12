@@ -3,6 +3,10 @@ Safe Bilevel Optimization: In these series of works, we take inspiration from co
 
 This repository contains the codebases for the methods described in [**"Safe Gradient Flow for Bilevel Optimization"**](https://arxiv.org/abs/2501.16520), presented at the **2025 American Control Conference (ACC)**, [**"Sequential QCQP for Bilevel Optimization with Line Search"**](https://arxiv.org/abs/2505.14647?) accepted at **IEEE Control Systems Letters (L-CSS)** and **2025 Conference on Decision and Control (CDC)**, and [**"Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization"**](https://arxiv.org/abs/2504.17215) which is under review.
 
+Here is an overview of the methods:
+
+<img src="Result/readme/Overview.png" alt="Bilevel Optimization Diagram" width="400">
+
 Next, we discuss how to execute the code.
 
 ## How to Run the Code
@@ -26,6 +30,11 @@ You can also choose from the following problems:
 The `BilevelSolver` class in `bilevel_solver.py` containts the implementations of our methods, and the state-of-the-art methods that we comapre with. You can also find the code for calculating the function definitions for `f()` and `g()`, and their derivatives in the same file. 
 
 You can modify the configurations based on your experiment. To add experiment with new parameters or method, you can change the `scenario_setup()` function in `setup.py`. Note that some hyperparameters (e.g., the step sizes) might have to be fine tuned to result in the best performance of the methods if the setup is changed.
+
+The resulting plots will be in the following form:
+
+<img src="Result/readme/sample.png" alt="Bilevel Optimization Diagram" width="800">
+
 
 ## Citation
 If you use this code in your work or found this repository usefull, please cite our papers:
