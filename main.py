@@ -7,6 +7,7 @@ import argparse
 import time
 
 from tqdm import tqdm
+import os
 # from torchviz import make_dot
 # from scipy.optimize import minimize
 # from cyipopt import minimize_ipopt
@@ -79,12 +80,14 @@ if __name__ == '__main__':
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--testID', type=int, default=0)
     parser.add_argument('--scenarioID', type=int, default=0)
+    parser.add_argument('--use_time', action='store_true', help='Use wall-clock instead of iterations')
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    solver = BilevelSolver(args.testID, args.scenarioID, device=device)
+    solver = BilevelSolver(args.testID, args.scenarioID, use_time=args.use_time, device=device)
     # 
+    EXPERIMENTS = ['toy_example', 'toy_example_nc', 'toy_example_cons', 'toy_CS', 'DHC', 'DHC_LS', 'NN']
     toy_example = (args.testID == 0)
     toy_example_nc = (args.testID == 1)
     toy_example_cons = (args.testID == 2)
@@ -272,6 +275,9 @@ if __name__ == '__main__':
             # if not (toy_example_nc or toy_CS):
             # ax2.plot(tt, [epsilon] * len(tt), 'r--')
 
+            dir_path = 'Result/' + EXPERIMENTS[args.testID]
+            os.makedirs(dir_path, exist_ok=True)
+
             if DHC or DHC_LS or NN: 
                 # Plotting accuracy
                 print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
@@ -290,7 +296,7 @@ if __name__ == '__main__':
                     axtr.set_xlabel(t_label)
                     axtr.set_ylabel('Training Loss')
                     axtr.legend() 
-                    fign.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + 'Loss_tr' + '.pdf', dpi=300,
+                    fign.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss_tr' + '.pdf', dpi=300,
                                 bbox_inches='tight', pad_inches=0.1)
 
                 ax4.plot(tt, loss[1], label=(strLabel))
@@ -298,10 +304,8 @@ if __name__ == '__main__':
                 ax4.set_ylabel('Validation Loss')
                 ax4.legend()
 
-                fig3.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + 'Acc' + '.pdf', dpi=300,
-                             bbox_inches='tight', pad_inches=0.1)
-                fig4.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_CS else 'DHC/') + 'Loss' + '.pdf', dpi=300,
-                             bbox_inches='tight', pad_inches=0.1)
+                fig3.savefig('Result/' + EXPERIMENTS[args.testID] + '/Acc' + '.pdf', dpi=300, bbox_inches='tight', pad_inches=0.1)
+                fig4.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss' + '.pdf', dpi=300, bbox_inches='tight', pad_inches=0.1)
                 
             ax1.legend()
             ax1.set_xlabel(t_label)
@@ -323,11 +327,11 @@ if __name__ == '__main__':
             # plt.tight_layout()
             scenarioItems = ['method', 'alpha', 'epsilon']
             item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            fig1.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
+            fig1.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
                           dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig11.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
+            fig11.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
                            dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig2.savefig('Result/' + ('toy_example/' if toy_example or toy_example_nc or toy_example_cons or toy_CS else 'DHC/') + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
+            fig2.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
                           dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 

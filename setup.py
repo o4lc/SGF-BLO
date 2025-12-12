@@ -20,7 +20,9 @@ def scenario_setup(id):
     (name of the method, alpha, epsilon, corropution rate, mode, beta/w)
     '''
     # mode = ['RXGD', 'QCQP', 'QP1', 'QP2', 'MO-GD', 'NN']
-    if id == 0: #scenarioAlpha
+    if id == -1: #testingScenario
+        return [('IFDT', 0.1, 0.1, 0, 'QP1', None), ('BOME', 0.1, 0.1, 0, None, None)]
+    elif id == 0: #scenarioAlpha
         return [('IFCT', 0.01, 0.1, None, None, None), ('IFCT', 0.05, 0.1, None, None, None), 
                  ('IFCT', 0.1, 0.1, None, None, None), ('IFCT', 0.5, 0.1, None, None, None), 
                  ('IFCT', 1, 0.1, None, None, None)]
@@ -41,9 +43,11 @@ def scenario_setup(id):
     elif id == 6: #scenarioIFDT SOTA
         return [('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, 0, 'QP2', None), ('BOME', 0.1, 0.1, 0, None, None)]
     elif id == 7: #scenarioIFDT SOTA 2
-        return [('BOME', 0.1, 0.1, 0, None, None), ('AIDBio', 0.1, 0.1, 0, None, None), ('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, 0, 'QP2', None)]
+        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', None), ('IFDT', 0.1, 0.1, 0.25, 'QP2', None), \
+                ('BOME', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
     elif id == 8: #scenarioIFDT SOTA 3
-        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', None), ('BOME', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
+        return [('IFDT', 0.1, 0.1, 0.25, 'QP1', None), ('IFDT', 0.1, 0.1, 0.25, 'QP2', None), \
+                ('BOME', 0.1, 0.1, 0.25, None, None), ('AIDBio', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
     # ----------------------------------------
     elif id == 9: #scenarioQCQP w ablation
         return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]
@@ -68,6 +72,7 @@ def scenario_setup(id):
 
     
 def load_setup(testID=0, p=None, device=None):
+    # TODO Handle the experiments better!
     if device is None:
         raise ValueError('Device not specified')
     if testID in [0, 1, 2]:
@@ -120,7 +125,7 @@ def load_setup(testID=0, p=None, device=None):
     elif testID in [4, 5, 6]:
         arch = None
         # DHC with PCA and without PCA
-        if testID == 3:
+        if testID == 4:
             string = 'p' + str(p)
         else:
             string = 'p' + str(p) + 'Full'
@@ -134,7 +139,7 @@ def load_setup(testID=0, p=None, device=None):
         B_test = torch.load('data/B_test' + string + '.pt', weights_only=True).to(torch.float32).to(device)
 
         lam = 0.001      # Regularization parameter
-        if testID == 3 or testID == 4:
+        if testID == 4 or testID == 5:
             dimX = (A_tr.shape[0], 1); dimY = (A_tr.shape[1], B_tr.shape[1]);
             def f(x, y):
                 x = x.reshape(dimX); y = y.reshape(dimY)

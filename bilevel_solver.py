@@ -8,7 +8,7 @@ from setup import load_setup
 from utilities import add_loss, calculate_losses, cvxpy_QCQP, cvxpy_MOGD, conjugate_gradient
 
 class BilevelSolver:
-    def __init__(self, testID, scenarioID, device='cpu'):
+    def __init__(self, testID, scenarioID, use_time=False, device='cpu'):
         self.testID = testID
         self.toy_example = (testID == 0)
         self.toy_example_nc = (testID == 1)
@@ -22,6 +22,12 @@ class BilevelSolver:
         self.scenarioID = scenarioID
 
         self.num_grad_calc = None
+        self.use_time = use_time
+
+        if self.use_time:
+            if self.DHC: self.time_limit = 100  # seconds
+            elif self.NN : self.time_limit = 10  # seconds
+            else: raise NotImplementedError('Time limit not set for this problem')
 
         # scenarios = scenario_setup(scenarioID)
         torch.manual_seed(0); np.random.seed(0)
@@ -55,7 +61,6 @@ class BilevelSolver:
             else:
                 dfdx, dfdy, dgdx, dgdy = self.calc_derivatives(x, y, matrixVectorProduct=False, first_order=True)
                 with torch.no_grad():
-                    # print(torch.linalg.norm(dgdy))
                     optimizer.zero_grad()  # Zero previous gradients
                     y.grad = dgdy.reshape(y.shape)  # Set the gradient manually for Adam
                     optimizer.step()  # Perform an optimization step
@@ -100,7 +105,7 @@ class BilevelSolver:
             t = torch.linspace(0, 20, 25000)
         elif self.DHC or self.DHC_LS:
             x0 = torch.zeros((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
-            t = torch.linspace(0, 50, 100)
+            t = torch.linspace(0, 50, 250)
         elif self.NN:
             x0 = torch.randn((self.sizeX, 1), requires_grad=True, dtype=torch.float32).to(self.device)
             t = torch.linspace(0, 0, 200)
@@ -322,9 +327,15 @@ class BilevelSolver:
         train_loss, val_loss, test_loss = [], [], []
         t_list = []
         tt = 1
+
+        if self.use_time: 
+            K = 1000000
+            start_time = time.time()
+
         if beta is not None:
             beta = torch.Tensor([beta]).to(self.device)
         for k in tqdm(range(K)):
+            if self.use_time and (time.time() - start_time) > self.time_limit: break
             # Calculate derivatives for current x and y
             if self.toy_example or self.toy_example_nc or self.toy_CS:
                 dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = self.calc_derivatives(x, y)
@@ -410,15 +421,16 @@ class BilevelSolver:
 
             elif mode in ['QP1', 'QP2']:
                 with torch.no_grad():
-                    if mode[-1] == '1':
+                    if mode == 'QP1':
                         # K^-1/3 ~ 0.001
                         if self.toy_example or self.toy_example_nc: alpha_K = 1.5 * K**(-1/3); alpha_step_K = 1.5 * K**(-1/3)
                         elif self.toy_CS: alpha_K = 0.1 * K**(-1/3); alpha_step_K = 0.1 * K**(-1/3)
                         else: alpha_K = 5 * K**(-1/3); alpha_step_K = 5 * K**(-1/3)
                         cprime = alpha_K * (torch.linalg.norm(dh, 2)**2)
-                    elif mode[-1] == '2':
+                    elif mode == 'QP2':
                         # K^-1/3 ~ 0.001, K^-2/3 ~ 0.0005
-                        alpha_K = 10 * K**(-1/3); alpha_step_K = 10 * K**(-2/3)
+                        if self.toy_example or self.toy_example_nc: alpha_K = 10 * K**(-1/3); alpha_step_K = 10 * K**(-2/3)
+                        else: alpha_K = 10 * K**(-1/3); alpha_step_K = 10 * K**(-2/3)
                         cprime = alpha_K * (torch.linalg.norm(dh, 2) * torch.linalg.norm(dgdy, 2))
                     else:
                         raise ValueError('Invalid mode')
@@ -458,7 +470,12 @@ class BilevelSolver:
         train_accuracy, val_accuracy, test_accuracy = [], [], []
         train_loss, val_loss, test_loss = [], [], []
 
+        if self.use_time: 
+            K = 1000000
+            start_time = time.time()
+
         for k in tqdm(range(K)):
+            if self.use_time and (time.time() - start_time) > self.time_limit: break
             y_gd = y.clone().detach()
             for t in range(T):
                 # inner loop
@@ -506,11 +523,16 @@ class BilevelSolver:
         train_accuracy, val_accuracy, test_accuracy = [], [], []
         train_loss, val_loss, test_loss = [], [], []
 
+        if self.use_time: 
+            K = 1000000
+            start_time = time.time()
+
         gamma_init = 0 
         gamma_max = 0.2
         gamma_steps = K * 3 // 4
         gamma = gamma_init
         for k in tqdm(range(K)):
+            if self.use_time and (time.time() - start_time) > self.time_limit: break
             gamma = min(gamma_max, gamma + gamma_max / gamma_steps)
             y_gd = y
             for t in range(T):
@@ -551,7 +573,13 @@ class BilevelSolver:
         train_loss, val_loss, test_loss = [], [], []
         nu = torch.zeros_like(y0)
         # x.requires_grad = False
+
+        if self.use_time: 
+            K = 1000000
+            start_time = time.time()
+
         for k in tqdm(range(K)):
+            if self.use_time and (time.time() - start_time) > self.time_limit: break
             for t in range(D):
                 dfdx, dfdy, dgdx, dgdy, dgdyy, dgdyx = self.calc_derivatives(x, y)
                 with torch.no_grad():
