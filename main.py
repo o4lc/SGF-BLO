@@ -191,7 +191,7 @@ if __name__ == '__main__':
             if toy_example: alpha_step = 0.01
             elif toy_example_nc: alpha_step = 0.1
             elif toy_example_cons: alpha_step = 0.1
-            elif DHC or DHC_LS: alpha_step = 1
+            elif DHC or DHC_LS: alpha_step = 0.5
             else: alpha_step = 0.1
 
             lossF, lossG, lossF2, acc, loss = solver.VPBGD(x0, y0, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4) // 11), T=10)
@@ -226,8 +226,8 @@ if __name__ == '__main__':
             elif flag_w: strLabel = r'$w$= ' + str(beta)
             elif DHC or DHC_LS or NN: 
                 if method == 'IFDT': 
-                    if mode == 'QP1': strLabel = 'Theorem 4.1'
-                    elif mode == 'QP2': strLabel = 'Theorem 4.5'
+                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
+                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
                     else: strLabel = mode
                     strLabel +=  r': p= ' + str(p)
                 else: strLabel = method + r': p= ' + str(p)
@@ -236,8 +236,8 @@ if __name__ == '__main__':
             else:
                 if method != 'IFDT': strLabel = method
                 else:
-                    if mode == 'QP1': strLabel = 'Theorem 4.1'
-                    elif mode == 'QP2': strLabel = 'Theorem 4.5'
+                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
+                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
                     else: strLabel = mode
 
             print('Number of Gradient Calculations:', len(tt), '\n')
@@ -304,8 +304,12 @@ if __name__ == '__main__':
                 ax4.set_ylabel('Validation Loss')
                 ax4.legend()
 
-                fig3.savefig('Result/' + EXPERIMENTS[args.testID] + '/Acc' + '.pdf', dpi=300, bbox_inches='tight', pad_inches=0.1)
-                fig4.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss' + '.pdf', dpi=300, bbox_inches='tight', pad_inches=0.1)
+                
+                save_title = '/Acc.pdf' if not args.use_time else '/Acc_time.pdf'
+                fig3.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+                
+                save_title = '/Loss.pdf' if not args.use_time else '/Loss_time.pdf'
+                fig4.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
                 
             ax1.legend()
             ax1.set_xlabel(t_label)
@@ -327,16 +331,21 @@ if __name__ == '__main__':
             # plt.tight_layout()
             scenarioItems = ['method', 'alpha', 'epsilon']
             item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            fig1.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1' + '.pdf',
-                          dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig11.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2' + '.pdf',
-                           dpi=300, bbox_inches='tight', pad_inches=0.1)
-            fig2.savefig('Result/' + EXPERIMENTS[args.testID] + '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low' + '.pdf',
-                          dpi=300, bbox_inches='tight', pad_inches=0.1)
+            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1_time.pdf'
+            fig1.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+
+            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low_time.pdf'
+            fig11.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+
+            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2_time.pdf'
+            fig2.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
     plt.close(fig1)
     fig11.show()
     # plt.pause(0)
-    plt.show()
+    plt.show(block=False)
     plt.close('all')

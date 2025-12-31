@@ -47,7 +47,8 @@ def scenario_setup(id):
                 ('BOME', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
     elif id == 8: #scenarioIFDT SOTA 3
         return [('IFDT', 0.1, 0.1, 0.25, 'QP1', None), ('IFDT', 0.1, 0.1, 0.25, 'QP2', None), \
-                ('BOME', 0.1, 0.1, 0.25, None, None), ('AIDBio', 0.1, 0.1, 0.25, None, None), ('VPBGD', 0.1, 0.1, 0.25, None, None)]
+                ('VPBGD', 0.1, 0.1, 0.25, None, None), ('BOME', 0.1, 0.1, 0.25, None, None), \
+                ('AIDBio', 0.1, 0.1, 0.25, None, None), ]
     # ----------------------------------------
     elif id == 9: #scenarioQCQP w ablation
         return [('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.001), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.01), ('IFDT', 0.1, 0.1, 0.25, 'QCQP', 0.1)]

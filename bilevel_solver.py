@@ -26,7 +26,7 @@ class BilevelSolver:
 
         if self.use_time:
             if self.DHC: self.time_limit = 100  # seconds
-            elif self.NN : self.time_limit = 10  # seconds
+            elif self.NN : self.time_limit = 10000  # seconds
             else: raise NotImplementedError('Time limit not set for this problem')
 
         # scenarios = scenario_setup(scenarioID)
@@ -105,7 +105,7 @@ class BilevelSolver:
             t = torch.linspace(0, 20, 25000)
         elif self.DHC or self.DHC_LS:
             x0 = torch.zeros((self.sizeX, 1), requires_grad=False, dtype=torch.float32).to(self.device)
-            t = torch.linspace(0, 50, 250)
+            t = torch.linspace(0, 50, 100)
         elif self.NN:
             x0 = torch.randn((self.sizeX, 1), requires_grad=True, dtype=torch.float32).to(self.device)
             t = torch.linspace(0, 0, 200)
@@ -425,7 +425,7 @@ class BilevelSolver:
                         # K^-1/3 ~ 0.001
                         if self.toy_example or self.toy_example_nc: alpha_K = 1.5 * K**(-1/3); alpha_step_K = 1.5 * K**(-1/3)
                         elif self.toy_CS: alpha_K = 0.1 * K**(-1/3); alpha_step_K = 0.1 * K**(-1/3)
-                        else: alpha_K = 5 * K**(-1/3); alpha_step_K = 5 * K**(-1/3)
+                        else: alpha_K = 0.01 * K**(-1/3); alpha_step_K = 1 * K**(-1/3)
                         cprime = alpha_K * (torch.linalg.norm(dh, 2)**2)
                     elif mode == 'QP2':
                         # K^-1/3 ~ 0.001, K^-2/3 ~ 0.0005

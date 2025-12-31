@@ -6,5 +6,12 @@
 # --------------------------------
 # scenarioID: Choose from setup.py to run the experiments of the ACC 2025 or CDC 2025 paper
 
+
+
 python3 main.py --testID 4 --scenarioID 8 #--use_time
 
+
+#python3 main.py --testID 5 --scenarioID 7 #--use_time
+
+
+#python3 main.py --testID 6 --scenarioID 7 --use_time
