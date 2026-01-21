@@ -188,9 +188,9 @@ if __name__ == '__main__':
             lossF, lossG, lossF2, acc, loss = solver.BOME(x0, y0, alpha_step=alpha_step, K=np.maximum(1, int(len(t) * 4 / 11)), T=10)
             tt = torch.linspace(0, t[-1], lossF.shape[0])
         elif method == 'VPBGD':
-            if toy_example: alpha_step = 0.01
-            elif toy_example_nc: alpha_step = 0.1
-            elif toy_example_cons: alpha_step = 0.1
+            if toy_example: alpha_step = 0.005
+            elif toy_example_nc: alpha_step = 0.01
+            elif toy_example_cons: alpha_step = 0.05
             elif DHC or DHC_LS: alpha_step = 0.5
             else: alpha_step = 0.1
 
@@ -326,21 +326,25 @@ if __name__ == '__main__':
             ax2.legend()
             ax2.set_xlabel(t_label)
             ax2.set_ylabel(r'$\|\nabla g(x,y)\|$')
+            # ax2.set_ylim(top= 0.5)
+            ax2.set_yscale('log')
 
 
             # plt.tight_layout()
             scenarioItems = ['method', 'alpha', 'epsilon']
             item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up1_time.pdf'
+            detail_str = str(scenarios[0][item]) + ('-' + str(scenarios[0][-2])) if scenarios[0][-2] is not None else ''
+
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up1.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-up1_time.pdf'
             fig1.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
 
-            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-low_time.pdf'
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up2.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-up2_time.pdf'
             fig11.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
 
-            save_title = '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + str(scenarios[0][item]) + '-up2_time.pdf'
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-low.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-low_time.pdf'
             fig2.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
 
 
