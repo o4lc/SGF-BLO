@@ -31,7 +31,7 @@ class BilevelSolver:
             else: raise NotImplementedError('Time limit not set for this problem')
 
         # scenarios = scenario_setup(scenarioID)
-        torch.manual_seed(0); np.random.seed(0)
+        
 
     def load_setup(self, p=-1):
         if self.toy_example or self.toy_example_nc or self.toy_example_cons:

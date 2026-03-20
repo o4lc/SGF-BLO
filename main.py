@@ -81,6 +81,8 @@ if __name__ == '__main__':
     parser.add_argument('--testID', type=int, default=0)
     parser.add_argument('--scenarioID', type=int, default=0)
     parser.add_argument('--use_time', action='store_true', help='Use wall-clock instead of iterations')
+    parser.add_argument('--num_average', type=int, default=1)
+    parser.add_argument('--plot_std', action='store_true')
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -98,13 +100,13 @@ if __name__ == '__main__':
 
 
     plt.rcParams.update({
-    'font.size': 16,          # General font size
-    'xtick.labelsize': 16,    # Tick label size for x-axis
-    'ytick.labelsize': 16,    # Tick label size for y-axis
-    'axes.labelsize': 16,      # Font size for axis labels,
-    'pdf.fonttype': 42,
-    'ps.fonttype': 42
-})
+        'font.size': 16,          # General font size
+        'xtick.labelsize': 16,    # Tick label size for x-axis
+        'ytick.labelsize': 16,    # Tick label size for y-axis
+        'axes.labelsize': 16,      # Font size for axis labels,
+        'pdf.fonttype': 42,
+        'ps.fonttype': 42
+    })
 
     if toy_example or toy_example_nc or toy_example_cons:
         fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc or toy_example_cons)
@@ -162,9 +164,9 @@ if __name__ == '__main__':
                 if DHC or DHC_LS or NN:
                     pars = (solver.A_tr, solver.B_tr, solver.A_val, solver.B_val, solver.A_test, solver.B_test)
                     train_accuracy, val_accuracy, test_accuracy, train_loss, val_loss, test_loss =\
-                          add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss,\
+                        add_loss(solution[i, sizeX:], train_accuracy, val_accuracy, test_accuracy, train_loss,\
                                     val_loss, test_loss, pars, solver.dimY, solver.arch)
-                                                                      
+                                                                    
             acc = (train_accuracy, val_accuracy, test_accuracy); loss = (train_loss, val_loss, test_loss)
         elif method == 'IFDT':
             if toy_example: alpha_step = 0.05
@@ -206,7 +208,18 @@ if __name__ == '__main__':
             raise ValueError('Invalid method')
         print('Time taken:', time.time() - t1)
 
-        
+        lossF_all.append(lossF); lossG_all.append(lossG); lossF2_all.append(lossF2)
+        acc_all.append(acc); loss_all.append(loss)
+
+
+        # # Mean of iterations 
+        # lossF = np.mean(lossF_all, axis=0); lossG = np.mean(lossG_all, axis=0); lossF2 = np.mean(lossF2_all, axis=0)
+        # acc = np.mean(acc_all, axis=0); loss = np.mean(loss_all, axis=0)
+
+        # # Std of iterations
+        # loss_F_std = np.std(lossF_all, axis=0); loss_G_std = np.std(lossG_all, axis=0); loss_F2_std = np.std(lossF2_all, axis=0)
+        # acc_std = np.std(acc_all, axis=0); loss_std = np.std(loss_all, axis=0)
+
         with torch.no_grad():
             flag_method, flag_alpha, flag_epsilon, flag_p, flag_w = 1, 1, 1, 1, 1
             try:
@@ -263,6 +276,11 @@ if __name__ == '__main__':
                 axm.legend()
             ax1.plot(tt, lossF, label= (strLabel))
             ax11.plot(tt, lossF2, label=(strLabel))
+
+            if args.plot_std:
+                print(loss_F_std, loss_F2_std)
+                ax1.fill_between(tt, lossF - loss_F_std, lossF + loss_F_std, alpha=0.2)
+                ax11.fill_between(tt, lossF2 - loss_F2_std, lossF2 + loss_F2_std, alpha=0.2)
 
             
             # -----------------------------------------------------

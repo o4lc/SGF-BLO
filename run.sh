@@ -15,4 +15,4 @@
 #python3 main.py --testID 5 --scenarioID 7 #--use_time
 
 
-python3 main.py --testID 4 --scenarioID 7 --use_time
+python3 main2.py --testID 0 --scenarioID 4 --plot_std --num_average 5 #--use_time
