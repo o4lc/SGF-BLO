@@ -87,7 +87,7 @@ def plot(args):
 
     for (method, alpha, epsilon, p, mode, beta) in scenarios: 
         for i in range(args.num_average):
-            label = method + f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{i}"
+            label = f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{i}"
 
             lossF = np.load(dirpath + 'lossF_' + label + '.npy')
             lossF2 = np.load(dirpath + 'lossF2_' + label + '.npy')
@@ -179,8 +179,10 @@ def plot(args):
             ax11.plot(tt, lossF2, label=(strLabel))
 
             if args.plot_std:
-                ax1.fill_between(tt, lossF - lossF_std, lossF + lossF_std, alpha=0.2)
-                ax11.fill_between(tt, lossF2 - lossF2_std, lossF2 + lossF2_std, alpha=0.2)
+                ax1.fill_between(tt, lossF - lossF_std * 1.96 / np.sqrt(args.num_average),\
+                                  lossF + lossF_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                ax11.fill_between(tt, lossF2 - lossF2_std * 1.96 / np.sqrt(args.num_average), \
+                                   lossF2 + lossF2_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
 
             
             # -----------------------------------------------------
@@ -191,7 +193,8 @@ def plot(args):
 
             ax2.plot(tt, lossG, label=(strLabel))
             if args.plot_std:
-                ax2.fill_between(tt, lossG - lossG_std, lossG + lossG_std, alpha=0.2)
+                ax2.fill_between(tt, lossG - lossG_std * 1.96 / np.sqrt(args.num_average) \
+                                 , lossG + lossG_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
 
             dir_path = 'Result/' + EXPERIMENTS[args.testID]
             os.makedirs(dir_path, exist_ok=True)
@@ -201,7 +204,8 @@ def plot(args):
                 print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
                 ax3.plot(tt, acc[2], label=(strLabel))
                 if args.plot_std:
-                    ax3.fill_between(tt, acc[2] - acc_std[2], acc[2] + acc_std[2], alpha=0.2)
+                    ax3.fill_between(tt, acc[2] - acc_std[2] * 1.96 / np.sqrt(args.num_average),\
+                                      acc[2] + acc_std[2] * 1.96 / np.sqrt(args.num_average), alpha=0.2)
 
                 ax3.set_xlabel(t_label)
                 ax3.set_ylabel('Test Accuracy')
@@ -222,7 +226,8 @@ def plot(args):
 
                 ax4.plot(tt, loss[1], label=(strLabel))
                 if args.plot_std:
-                    ax4.fill_between(tt, loss[1] - loss_std[1], loss[1] + loss_std[1], alpha=0.2)
+                    ax4.fill_between(tt, loss[1] - loss_std[1] * 1.96 / np.sqrt(args.num_average),\
+                                      loss[1] + loss_std[1] * 1.96 / np.sqrt(args.num_average), alpha=0.2)
                 ax4.set_xlabel(t_label)
                 ax4.set_ylabel('Validation Loss')
                 ax4.legend()
@@ -393,7 +398,7 @@ def run(args, device):
         dirpath = 'Result/' + EXPERIMENTS[args.testID] + '/data/' 
         if not os.path.exists(dirpath):
             os.makedirs(dirpath) 
-        label = method + f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{args.seed}"
+        label = f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{args.seed}"
         np.save(dirpath + 'lossF_' + label + '.npy', lossF)
         np.save(dirpath + 'lossF2_' + label + '.npy', lossF2)
         np.save(dirpath + 'lossG_' + label + '.npy', lossG)
