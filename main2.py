@@ -108,6 +108,7 @@ def plot(args):
                 acc_all = np.vstack((acc_all, [acc]))
                 loss_all = np.vstack((loss_all, [loss]))
 
+        print(f'method: {method}, shape: ', lossF2_all.shape)
         lossF = np.mean(lossF_all, axis=0)
         lossG = np.mean(lossG_all, axis=0)
         lossF2 = np.mean(lossF2_all, axis=0)
@@ -180,9 +181,9 @@ def plot(args):
 
             if args.plot_std:
                 ax1.fill_between(tt, lossF - lossF_std * 1.96 / np.sqrt(args.num_average),\
-                                  lossF + lossF_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                                  lossF + lossF_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
                 ax11.fill_between(tt, lossF2 - lossF2_std * 1.96 / np.sqrt(args.num_average), \
-                                   lossF2 + lossF2_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                                   lossF2 + lossF2_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
 
             
             # -----------------------------------------------------
@@ -194,18 +195,19 @@ def plot(args):
             ax2.plot(tt, lossG, label=(strLabel))
             if args.plot_std:
                 ax2.fill_between(tt, lossG - lossG_std * 1.96 / np.sqrt(args.num_average) \
-                                 , lossG + lossG_std * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                                 , lossG + lossG_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
 
             dir_path = 'Result/' + EXPERIMENTS[args.testID]
             os.makedirs(dir_path, exist_ok=True)
 
             if DHC or DHC_LS or NN: 
                 # Plotting accuracy
-                print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
-                ax3.plot(tt, acc[2], label=(strLabel))
+                # print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
+                acc_plot = acc[2].reshape(-1, )
+                ax3.plot(tt, acc_plot, label=(strLabel))
                 if args.plot_std:
-                    ax3.fill_between(tt, acc[2] - acc_std[2] * 1.96 / np.sqrt(args.num_average),\
-                                      acc[2] + acc_std[2] * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                    ci = 1.96 * acc_std[2].reshape(-1, ) / np.sqrt(args.num_average)
+                    ax3.fill_between(tt, acc_plot - ci, acc_plot + ci, alpha=0.3)
 
                 ax3.set_xlabel(t_label)
                 ax3.set_ylabel('Test Accuracy')
@@ -223,11 +225,12 @@ def plot(args):
                     axtr.legend() 
                     fign.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss_tr' + '.pdf', dpi=300,
                                 bbox_inches='tight', pad_inches=0.1)
-
+                
+                loss_plot = loss[1].reshape(-1, )
                 ax4.plot(tt, loss[1], label=(strLabel))
                 if args.plot_std:
-                    ax4.fill_between(tt, loss[1] - loss_std[1] * 1.96 / np.sqrt(args.num_average),\
-                                      loss[1] + loss_std[1] * 1.96 / np.sqrt(args.num_average), alpha=0.2)
+                    ci = 1.96 * loss_std[1].reshape(-1, ) / np.sqrt(args.num_average)
+                    ax4.fill_between(tt, loss_plot - ci, loss_plot + ci, alpha=0.3)
                 ax4.set_xlabel(t_label)
                 ax4.set_ylabel('Validation Loss')
                 ax4.legend()
