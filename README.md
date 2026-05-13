@@ -99,7 +99,7 @@ If you use this code in your work, please cite our papers:
 @article{abolfazli2025perturbed,
   title={Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization},
   author={Abolfazli, Nazanin and Sharifi, Sina and Fazlyab, Mahyar and Hamedani, Erfan Yazdandoost},
-  journal={Transactions on Machine Learning Research},
+  journal={arXiv preprint arXiv:2504.17215},
   year={2025}
 }
 ```
