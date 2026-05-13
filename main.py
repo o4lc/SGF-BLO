@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import argparse
 import time
+from functools import partial
 
 from tqdm import tqdm
 import os
@@ -18,9 +19,8 @@ from utilities import add_loss, calculate_losses, cvxpy_QCQP, cvxpy_MOGD
 from setup import load_setup, scenario_setup, get_axs
 
 # Define the system of ODEs
-def system(t, variables):
+def system(t, variables, sizeX, method, alpha, epsilon, solver, device, progress_bar, toy_example):
     x, y = variables[:sizeX], variables[sizeX:]
-    global dxdt #Because its previous value is required in ProjectMethod 1
     progress_bar.update(1)
 
     if (method == 'IFCT') and not toy_example:
@@ -120,6 +120,13 @@ def plot(args):
         lossF2_std = np.std(lossF2_all, axis=0)
         acc_std = np.std(acc_all, axis=0)
         loss_std = np.std(loss_all, axis=0)
+
+        lossF = np.asarray(lossF).reshape(-1)
+        lossG = np.asarray(lossG).reshape(-1)
+        lossF2 = np.asarray(lossF2).reshape(-1)
+        lossF_std = np.asarray(lossF_std).reshape(-1)
+        lossG_std = np.asarray(lossG_std).reshape(-1)
+        lossF2_std = np.asarray(lossF2_std).reshape(-1)
     
         # print(lossF.shape, lossG.shape, lossF2.shape, acc.shape, loss.shape)
         # print(lossF_std.shape, lossG_std.shape, lossF2_std.shape, acc_std.shape, loss_std.shape)
@@ -338,7 +345,18 @@ def run(args, device):
         if method in ['IFCT', 'NewSecondOrder', 'SecondOrder', 'STABLE']:
             initial_conditions = torch.cat((x0, y0), 0)
             progress_bar = tqdm(total= 4 * len(t))
-            solution = torchdiffeq.odeint(system, initial_conditions, t, method='rk4')
+            ode_system = partial(
+                system,
+                sizeX=sizeX,
+                method=method,
+                alpha=alpha,
+                epsilon=epsilon,
+                solver=solver,
+                device=device,
+                progress_bar=progress_bar,
+                toy_example=toy_example,
+            )
+            solution = torchdiffeq.odeint(ode_system, initial_conditions, t, method='rk4')
             progress_bar.close()
             tt = t
             train_accuracy, val_accuracy, test_accuracy = [], [], []
@@ -443,4 +461,3 @@ if __name__ == '__main__':
     plot(args)
         
     
-

@@ -1,0 +1,12 @@
+# Ignore Python-related files
+__pycache__/
+*.py[cod]
+*$py.class
+Debug/
+
+main_constrained.py
+test.ipynb
+
+# Ignore generated NumPy result files
+Result/**/*.npy
+Results/**/*.npy

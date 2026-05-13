@@ -17,7 +17,7 @@ def get_axs(toy_example=False, toy_CS=False):
 
 def scenario_setup(id):
     '''
-    (name of the method, alpha, epsilon, corropution rate, mode, beta/w)
+    (name of the method, alpha, epsilon, corruption rate, mode, beta/w)
     '''
     # mode = ['RXGD', 'QCQP', 'QP1', 'QP2', 'MO-GD', 'NN']
     if id == -1: #testingScenario
@@ -34,7 +34,7 @@ def scenario_setup(id):
                 ('IFCT', 0.1, 0.1, 0.4, None, None), ('AIDBio', 0.1, 0.1, 0.4, None, None)]
     # ----------------------------------------
     elif id == 3: #scenario2ndOrder
-        return [('SecondOrder', 0.1, None, None, None, None, None), ('STABLE', 0.1, None, None, None, None, None)]
+        return [('SecondOrder', 0.1, None, None, None, None), ('STABLE', 0.1, None, None, None, None)]
     # ----------------------------------------
     elif id == 4: #scenarioIFDT-K ablation
         return [('IFDT', 0.1, 0.1, 0, 'QP1', None), ('IFDT', 0.1, 0.1, -1, 'QP1', None), ('IFDT', 0.1, 0.1, -2, 'QP1', None)]
@@ -69,7 +69,7 @@ def scenario_setup(id):
                 # ('IFDT', 0.01, 50, 0.25, 'QP1'), ('BOME', 0.01, 50, 0.25, ' ')]
     # , ('IFDT', 0.5, 0.1, 0.25, 'QP1')]
     else:
-         return [('IFCT', 0.01, 0.1, None)]
+         raise ValueError(f'Unknown scenario id: {id}')
 
     
 def load_setup(testID=0, p=None, device=None):
@@ -231,6 +231,5 @@ def load_weights(model, y):
         with torch.no_grad():
             param.data = y[start:start + num_params].view(param.shape)  # Keeps tracking
         start += num_params
-
 
 

@@ -1,0 +1,6 @@
+numpy
+torch
+torchdiffeq
+matplotlib
+tqdm
+cvxpy
