@@ -72,33 +72,226 @@ def system(t, variables):
     
     return torch.cat((dxdt, dydt), 0)
 
- 
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='.',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--testID', type=int, default=0)
-    parser.add_argument('--scenarioID', type=int, default=0)
-    parser.add_argument('--use_time', action='store_true', help='Use wall-clock instead of iterations')
-    parser.add_argument('--num_average', type=int, default=1)
-    parser.add_argument('--plot_std', action='store_true')
-    args = parser.parse_args()
+def plot(args):
+    scenarios = scenario_setup(args.scenarioID)
+    dirpath = 'Result/' + EXPERIMENTS[args.testID] + '/data/' 
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if toy_example or toy_example_nc or toy_example_cons:
+        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc or toy_example_cons)
+    elif toy_CS:
+        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_CS=toy_CS)
+    else:
+        fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4 = get_axs(toy_example)
 
+    for (method, alpha, epsilon, p, mode, beta) in scenarios: 
+        for i in range(args.num_average):
+            label = f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{i}"
+
+            lossF = np.load(dirpath + 'lossF_' + label + '.npy')
+            lossF2 = np.load(dirpath + 'lossF2_' + label + '.npy')
+            lossG = np.load(dirpath + 'lossG_' + label + '.npy')
+            acc = np.load(dirpath + 'acc_' + label + '.npy')
+            loss = np.load(dirpath + 'loss_' + label + '.npy')
+
+            if i == 0:
+                lossF_all = np.array([lossF])
+                lossG_all = np.array([lossG])
+                lossF2_all = np.array([lossF2])
+                acc_all = np.array([acc])
+                loss_all = np.array([loss])
+            else:
+                lossF_all = np.vstack((lossF_all, lossF))
+                lossG_all = np.vstack((lossG_all, lossG))
+                lossF2_all = np.vstack((lossF2_all, lossF2))
+                acc_all = np.vstack((acc_all, [acc]))
+                loss_all = np.vstack((loss_all, [loss]))
+
+        print(f'method: {method}, shape: ', lossF2_all.shape)
+        lossF = np.mean(lossF_all, axis=0)
+        lossG = np.mean(lossG_all, axis=0)
+        lossF2 = np.mean(lossF2_all, axis=0)
+        acc = np.mean(acc_all, axis=0)
+        loss = np.mean(loss_all, axis=0)
+
+        lossF_std = np.std(lossF_all, axis=0)
+        lossG_std = np.std(lossG_all, axis=0)
+        lossF2_std = np.std(lossF2_all, axis=0)
+        acc_std = np.std(acc_all, axis=0)
+        loss_std = np.std(loss_all, axis=0)
+    
+        # print(lossF.shape, lossG.shape, lossF2.shape, acc.shape, loss.shape)
+        # print(lossF_std.shape, lossG_std.shape, lossF2_std.shape, acc_std.shape, loss_std.shape)
+
+        tt = range(len(lossF))
+
+        with torch.no_grad():
+            flag_method, flag_alpha, flag_epsilon, flag_p, flag_w = 1, 1, 1, 1, 1
+            try:
+                if args.scenarioID == 4 or args.scenarioID == 5: pass
+                if scenarios[0][0] == scenarios[1][0]: flag_method = 0
+                if scenarios[0][1] == scenarios[1][1]: flag_alpha = 0
+                if scenarios[0][2] == scenarios[1][2]: flag_epsilon = 0
+                if scenarios[0][3] == scenarios[1][3]: flag_p = 0
+                if scenarios[0][5] == scenarios[1][5]: flag_w = 0
+            except:
+                flag_alpha, flag_epsilon, flag_p = 0, 0, 0
+
+            if flag_alpha: strLabel = method + r': $\alpha$= ' + str(alpha)
+            elif flag_epsilon: strLabel = method + r': $\varepsilon$= ' + str(epsilon)
+            elif flag_w: strLabel = r'$w$= ' + str(beta)
+            elif DHC or DHC_LS or NN: 
+                if method == 'IFDT': 
+                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
+                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
+                    else: strLabel = mode
+                    strLabel +=  r': p= ' + str(p)
+                else: strLabel = method + r': p= ' + str(p)
+            elif args.scenarioID == 4 or args.scenarioID == 5: strLabel = r'K = ' + str(len(tt) // 10**3) + r" $\times 10^3$"
+            else:
+                if method != 'IFDT': strLabel = method
+                else:
+                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
+                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
+                    else: strLabel = mode
+
+            if 'IFCT' not in [method for method, _, _, _, _, _ in scenarios] and \
+                'SecondOrder' not in [method for method, _, _, _, _, _ in scenarios]:
+                tt = range(len(lossF))
+                t_label = 'iterations'
+            else:
+                t_label = 'time'
+            
+            if 'MOGD' in [mode for _, _, _, _, mode, _ in scenarios]:
+                try:
+                    axm  # Try accessing axm
+                except NameError:
+                    fign, axn = plt.subplots(1, 1, figsize=(8, 6)) 
+                    fign, axm = plt.subplots(1, 1, figsize=(8, 6)) 
+
+                axn.plot(tt, np.cumsum(lossF2) / np.arange(1, len(lossF2) + 1), label='Average Step: '+ method)
+                axn.set_yscale('log')
+                axn.legend()
+                axm.plot(tt, (lossF + 1) + beta * lossG**2, label='Merit Function: ' + method)
+                axm.set_yscale('log')
+                axm.legend()
+            ax1.plot(tt, lossF, label= (strLabel))
+            ax11.plot(tt, lossF2, label=(strLabel))
+
+            if args.plot_std:
+                ax1.fill_between(tt, lossF - lossF_std * 1.96 / np.sqrt(args.num_average),\
+                                  lossF + lossF_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
+                ax11.fill_between(tt, lossF2 - lossF2_std * 1.96 / np.sqrt(args.num_average), \
+                                   lossF2 + lossF2_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
+
+            
+            # -----------------------------------------------------
+            if len(tt) > 10**4:
+                ax11.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x / 1e3:.0f}"))
+                ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x / 1e3:.0f}"))  
+                t_label += r" $\times 10^3$"
+
+            ax2.plot(tt, lossG, label=(strLabel))
+            if args.plot_std:
+                ax2.fill_between(tt, lossG - lossG_std * 1.96 / np.sqrt(args.num_average) \
+                                 , lossG + lossG_std * 1.96 / np.sqrt(args.num_average), alpha=0.3)
+
+            dir_path = 'Result/' + EXPERIMENTS[args.testID]
+            os.makedirs(dir_path, exist_ok=True)
+
+            if DHC or DHC_LS or NN: 
+                # Plotting accuracy
+                # print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
+                acc_plot = acc[2].reshape(-1, )
+                ax3.plot(tt, acc_plot, label=(strLabel))
+                if args.plot_std:
+                    ci = 1.96 * acc_std[2].reshape(-1, ) / np.sqrt(args.num_average)
+                    ax3.fill_between(tt, acc_plot - ci, acc_plot + ci, alpha=0.3)
+
+                ax3.set_xlabel(t_label)
+                ax3.set_ylabel('Test Accuracy')
+                ax3.legend()
+
+                if False:
+                    # Plotting loss
+                    try:
+                        axtr  # Try accessing axm
+                    except NameError:
+                        fign, axtr = plt.subplots(1, 1, figsize=(8, 6))
+                    axtr.plot(tt, loss[0], label=(strLabel))
+                    axtr.set_xlabel(t_label)
+                    axtr.set_ylabel('Training Loss')
+                    axtr.legend() 
+                    fign.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss_tr' + '.pdf', dpi=300,
+                                bbox_inches='tight', pad_inches=0.1)
+                
+                loss_plot = loss[1].reshape(-1, )
+                ax4.plot(tt, loss[1], label=(strLabel))
+                if args.plot_std:
+                    ci = 1.96 * loss_std[1].reshape(-1, ) / np.sqrt(args.num_average)
+                    ax4.fill_between(tt, loss_plot - ci, loss_plot + ci, alpha=0.3)
+                ax4.set_xlabel(t_label)
+                ax4.set_ylabel('Validation Loss')
+                ax4.legend()
+
+                
+                save_title = '/Acc.pdf' if not args.use_time else '/Acc_time.pdf'
+                fig3.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+                
+                save_title = '/Loss.pdf' if not args.use_time else '/Loss_time.pdf'
+                fig4.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+                
+            ax1.legend()
+            ax1.set_xlabel(t_label)
+            ax1.set_ylabel('f(x,y)')
+
+            ax11.legend()
+            ax11.set_xlabel(t_label)
+            if toy_example_nc or NN:
+                ax11.set_ylabel(r'$\|\Delta z\|$')
+            else:
+                ax11.set_ylabel(r'$\|F(x,y)\|$')
+            ax11.set_yscale('log')
+
+            ax2.legend()
+            ax2.set_xlabel(t_label)
+            ax2.set_ylabel(r'$\|\nabla g(x,y)\|$')
+            # ax2.set_ylim(top= 0.5)
+            ax2.set_yscale('log')
+
+
+            # plt.tight_layout()
+            scenarioItems = ['method', 'alpha', 'epsilon']
+            item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
+            detail_str = str(scenarios[0][item]) + ('-' + str(scenarios[0][-2])) if scenarios[0][-2] is not None else ''
+
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up1.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-up1_time.pdf'
+            fig1.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up2.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-up2_time.pdf'
+            fig11.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+
+            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-low.pdf' if not args.use_time \
+                else '/' + scenarioItems[item] + ':' + detail_str + '-low_time.pdf'
+            fig2.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+
+
+    plt.close(fig1)
+    fig11.show()
+    plt.pause(1)
+    plt.show(block=False)
+    plt.close('all')
+
+
+
+
+def run(args, device):
+    torch.manual_seed(args.seed); np.random.seed(args.seed);
     solver = BilevelSolver(args.testID, args.scenarioID, use_time=args.use_time, device=device)
     # 
-    EXPERIMENTS = ['toy_example', 'toy_example_nc', 'toy_example_cons', 'toy_CS', 'DHC', 'DHC_LS', 'NN']
-    toy_example = (args.testID == 0)
-    toy_example_nc = (args.testID == 1)
-    toy_example_cons = (args.testID == 2)
-    toy_CS = (args.testID == 3)
-    DHC = (args.testID == 4)
-    DHC_LS = (args.testID == 5)
-    NN = (args.testID == 6)
-
-
     plt.rcParams.update({
         'font.size': 16,          # General font size
         'xtick.labelsize': 16,    # Tick label size for x-axis
@@ -108,13 +301,6 @@ if __name__ == '__main__':
         'ps.fonttype': 42
     })
 
-    if toy_example or toy_example_nc or toy_example_cons:
-        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_example or toy_example_nc or toy_example_cons)
-    elif toy_CS:
-        fig1, ax1, fig11, ax11, fig2, ax2 = get_axs(toy_CS=toy_CS)
-    else:
-        fig1, ax1, fig11, ax11, fig2, ax2, fig3, ax3, fig4, ax4 = get_axs(toy_example)
-
     scenarios = scenario_setup(args.scenarioID)
     p_old = scenarios[0][3]
     solver.load_setup(p=p_old)
@@ -122,6 +308,8 @@ if __name__ == '__main__':
 
     sizeX = solver.sizeX; sizeY = solver.sizeY
     dimX = solver.dimX; dimY = solver.dimY
+
+    lossF_all, lossG_all, lossF2_all, acc_all, loss_all = [], [], [], [], []
 
     for (method, alpha, epsilon, p, mode, beta) in scenarios: 
         solver.epsilon = epsilon
@@ -207,167 +395,52 @@ if __name__ == '__main__':
         else:
             raise ValueError('Invalid method')
         print('Time taken:', time.time() - t1)
-
-        lossF_all.append(lossF); lossG_all.append(lossG); lossF2_all.append(lossF2)
-        acc_all.append(acc); loss_all.append(loss)
+        print('Number of Gradient Calculations:', len(tt), '\n')
 
 
-        # # Mean of iterations 
-        # lossF = np.mean(lossF_all, axis=0); lossG = np.mean(lossG_all, axis=0); lossF2 = np.mean(lossF2_all, axis=0)
-        # acc = np.mean(acc_all, axis=0); loss = np.mean(loss_all, axis=0)
+        dirpath = 'Result/' + EXPERIMENTS[args.testID] + '/data/' 
+        if not os.path.exists(dirpath):
+            os.makedirs(dirpath) 
+        label = f"{method}_{alpha}_{epsilon}_{p}_{mode}_{beta}_{args.seed}"
+        np.save(dirpath + 'lossF_' + label + '.npy', lossF)
+        np.save(dirpath + 'lossF2_' + label + '.npy', lossF2)
+        np.save(dirpath + 'lossG_' + label + '.npy', lossG)
+        np.save(dirpath + 'acc_' + label + '.npy', acc)
+        np.save(dirpath + 'loss_' + label + '.npy', loss)
 
-        # # Std of iterations
-        # loss_F_std = np.std(lossF_all, axis=0); loss_G_std = np.std(lossG_all, axis=0); loss_F2_std = np.std(lossF2_all, axis=0)
-        # acc_std = np.std(acc_all, axis=0); loss_std = np.std(loss_all, axis=0)
-
-        with torch.no_grad():
-            flag_method, flag_alpha, flag_epsilon, flag_p, flag_w = 1, 1, 1, 1, 1
-            try:
-                if args.scenarioID == 4 or args.scenarioID == 5: pass
-                if scenarios[0][0] == scenarios[1][0]: flag_method = 0
-                if scenarios[0][1] == scenarios[1][1]: flag_alpha = 0
-                if scenarios[0][2] == scenarios[1][2]: flag_epsilon = 0
-                if scenarios[0][3] == scenarios[1][3]: flag_p = 0
-                if scenarios[0][5] == scenarios[1][5]: flag_w = 0
-            except:
-                flag_alpha, flag_epsilon, flag_p = 0, 0, 0
-
-            # print(flag_method, flag_alpha, flag_epsilon, flag_p, flag_w)
-            # raise
-            if flag_alpha: strLabel = method + r': $\alpha$= ' + str(alpha)
-            elif flag_epsilon: strLabel = method + r': $\varepsilon$= ' + str(epsilon)
-            elif flag_w: strLabel = r'$w$= ' + str(beta)
-            elif DHC or DHC_LS or NN: 
-                if method == 'IFDT': 
-                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
-                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
-                    else: strLabel = mode
-                    strLabel +=  r': p= ' + str(p)
-                else: strLabel = method + r': p= ' + str(p)
-            elif args.scenarioID == 4 or args.scenarioID == 5: strLabel = r'K = ' + str(len(tt) // 10**3) + r" $\times 10^3$"
-
-            else:
-                if method != 'IFDT': strLabel = method
-                else:
-                    if mode == 'QP1': strLabel = r"$\rho = \|\nabla h(x,y)\|^2$"
-                    elif mode == 'QP2': strLabel = r"$\rho = \|\nabla h(x,y)\|\sqrt{h(x,y)}$"
-                    else: strLabel = mode
-
-            print('Number of Gradient Calculations:', len(tt), '\n')
-            if 'IFCT' not in [method for method, _, _, _, _, _ in scenarios] and \
-                'SecondOrder' not in [method for method, _, _, _, _, _ in scenarios]:
-                tt = range(len(lossF))
-                t_label = 'iterations'
-            else:
-                t_label = 'time'
-            
-            if 'MOGD' in [mode for _, _, _, _, mode, _ in scenarios]:
-                try:
-                    axm  # Try accessing axm
-                except NameError:
-                    fign, axn = plt.subplots(1, 1, figsize=(8, 6)) 
-                    fign, axm = plt.subplots(1, 1, figsize=(8, 6)) 
-
-                axn.plot(tt, np.cumsum(lossF2) / np.arange(1, len(lossF2) + 1), label='Average Step: '+ method)
-                axn.set_yscale('log')
-                axn.legend()
-                axm.plot(tt, (lossF + 1) + beta * lossG**2, label='Merit Function: ' + method)
-                axm.set_yscale('log')
-                axm.legend()
-            ax1.plot(tt, lossF, label= (strLabel))
-            ax11.plot(tt, lossF2, label=(strLabel))
-
-            if args.plot_std:
-                print(loss_F_std, loss_F2_std)
-                ax1.fill_between(tt, lossF - loss_F_std, lossF + loss_F_std, alpha=0.2)
-                ax11.fill_between(tt, lossF2 - loss_F2_std, lossF2 + loss_F2_std, alpha=0.2)
-
-            
-            # -----------------------------------------------------
-            if len(tt) > 10**4:
-                ax11.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x / 1e3:.0f}"))
-                ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x / 1e3:.0f}"))  
-                t_label += r" $\times 10^3$"
-
-            ax2.plot(tt, lossG, label=(strLabel))
-            # if not (toy_example_nc or toy_CS):
-            # ax2.plot(tt, [epsilon] * len(tt), 'r--')
-
-            dir_path = 'Result/' + EXPERIMENTS[args.testID]
-            os.makedirs(dir_path, exist_ok=True)
-
-            if DHC or DHC_LS or NN: 
-                # Plotting accuracy
-                print('Train Accuracy:', acc[0][-1].item(), 'Validation Accuracy:', acc[1][-1].item(), 'Test Accuracy:', acc[2][-1].item(), '\n')
-                ax3.plot(tt, acc[2], label=(strLabel))
-                ax3.set_xlabel(t_label)
-                ax3.set_ylabel('Test Accuracy')
-                ax3.legend()
-
-                if False:
-                    # Plotting loss
-                    try:
-                        axtr  # Try accessing axm
-                    except NameError:
-                        fign, axtr = plt.subplots(1, 1, figsize=(8, 6))
-                    axtr.plot(tt, loss[0], label=(strLabel))
-                    axtr.set_xlabel(t_label)
-                    axtr.set_ylabel('Training Loss')
-                    axtr.legend() 
-                    fign.savefig('Result/' + EXPERIMENTS[args.testID] + '/Loss_tr' + '.pdf', dpi=300,
-                                bbox_inches='tight', pad_inches=0.1)
-
-                ax4.plot(tt, loss[1], label=(strLabel))
-                ax4.set_xlabel(t_label)
-                ax4.set_ylabel('Validation Loss')
-                ax4.legend()
-
-                
-                save_title = '/Acc.pdf' if not args.use_time else '/Acc_time.pdf'
-                fig3.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
-                
-                save_title = '/Loss.pdf' if not args.use_time else '/Loss_time.pdf'
-                fig4.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
-                
-            ax1.legend()
-            ax1.set_xlabel(t_label)
-            ax1.set_ylabel('f(x,y)')
-
-            ax11.legend()
-            ax11.set_xlabel(t_label)
-            if toy_example_nc or NN:
-                ax11.set_ylabel(r'$\|\Delta z\|$')
-            else:
-                ax11.set_ylabel(r'$\|F(x,y)\|$')
-            ax11.set_yscale('log')
-
-            ax2.legend()
-            ax2.set_xlabel(t_label)
-            ax2.set_ylabel(r'$\|\nabla g(x,y)\|$')
-            # ax2.set_ylim(top= 0.5)
-            ax2.set_yscale('log')
+    # return lossF_all, lossG_all, lossF2_all, acc_all, loss_all
+        
+ 
 
 
-            # plt.tight_layout()
-            scenarioItems = ['method', 'alpha', 'epsilon']
-            item = 2 * flag_epsilon + 1 * flag_alpha + 0 * flag_method
-            detail_str = str(scenarios[0][item]) + ('-' + str(scenarios[0][-2])) if scenarios[0][-2] is not None else ''
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='.',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--testID', type=int, default=0)
+    parser.add_argument('--scenarioID', type=int, default=0)
+    parser.add_argument('--use_time', action='store_true', help='Use wall-clock instead of iterations')
+    parser.add_argument('--num_average', type=int, default=1)
+    parser.add_argument('--plot_std', action='store_true')
+    args = parser.parse_args()
 
-            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up1.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + detail_str + '-up1_time.pdf'
-            fig1.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    args.seed = 0
 
-            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-up2.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + detail_str + '-up2_time.pdf'
-            fig11.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+    EXPERIMENTS = ['toy_example', 'toy_example_nc', 'toy_example_cons', 'toy_CS', 'DHC', 'DHC_LS', 'NN']
+    toy_example = (args.testID == 0)
+    toy_example_nc = (args.testID == 1)
+    toy_example_cons = (args.testID == 2)
+    toy_CS = (args.testID == 3)
+    DHC = (args.testID == 4)
+    DHC_LS = (args.testID == 5)
+    NN = (args.testID == 6)
 
-            save_title = '/' + scenarioItems[item] + ':' + detail_str + '-low.pdf' if not args.use_time \
-                else '/' + scenarioItems[item] + ':' + detail_str + '-low_time.pdf'
-            fig2.savefig(dir_path + save_title, dpi=300, bbox_inches='tight', pad_inches=0.1)
+    for i in range(args.num_average):
+        print('Experiment:', EXPERIMENTS[args.testID], 'Scenario:', args.scenarioID, 'Seed:', args.seed, 'out of ', args.num_average)
+        run(args, device)
+        args.seed += 1
 
+    plot(args)
+        
+    
 
-    plt.close(fig1)
-    fig11.show()
-    # plt.pause(0)
-    plt.show(block=False)
-    plt.close('all')
