@@ -1,63 +1,103 @@
 # SGF-BLO
-Safe Bilevel Optimization: In these series of works, we take inspiration from control theorey to design methods for solving bilevel optimization problems.
 
-This repository contains the codebases for the methods described in [**"Safe Gradient Flow for Bilevel Optimization"**](https://arxiv.org/abs/2501.16520), presented at the **2025 American Control Conference (ACC)**, [**"Sequential QCQP for Bilevel Optimization with Line Search"**](https://arxiv.org/abs/2505.14647?) accepted at **IEEE Control Systems Letters (L-CSS)** and **2025 Conference on Decision and Control (CDC)**, and [**"Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization"**](https://arxiv.org/abs/2504.17215) which is under review.
+Safe Bilevel Optimization contains implementations for bilevel optimization methods inspired by control theory.
 
-Here is an overview of the methods:
+This repository supports the experiments described in [**"Safe Gradient Flow for Bilevel Optimization"**](https://arxiv.org/abs/2501.16520), presented at the **2025 American Control Conference (ACC)**; [**"Sequential QCQP for Bilevel Optimization with Line Search"**](https://arxiv.org/abs/2505.14647), accepted at **IEEE Control Systems Letters (L-CSS)** and the **2025 Conference on Decision and Control (CDC)**; and [**"Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization"**](https://arxiv.org/abs/2504.17215), accepted at **Transactions on Machine Learning Research (TMLR)**.
 
-<img src="Result/readme/Overview.png" alt="Bilevel Optimization Diagram" width="400">
+<img src="readme/Overview.png" alt="Bilevel Optimization Diagram" width="400">
 
-Next, we discuss how to execute the code.
+## Setup
 
-## How to Run the Code
-To run the code, use the following command: `bash run.sh`.
+Create a Python environment and install the dependencies:
 
-This command runs the following code: ` python3 main.py --testID x --senarioID y`.
-Here, `main.py` is the main script, `--testID` selects the experiment setup from different options, and `--scenarioID` chooses the method to compare with and the parameters for the experiment. 
+```bash
+pip install -r requirements.txt
+```
 
-You can perform the experiments with all the developed methods:
-- `IFCT` denotes the continuous-time method developed in "Safe Gradient Flow for Bilevel Optimization".
-- `IFDT` denotes the discrete-time method developed "Sequential QCQP for Bilevel Optimization with Line Search" and "Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization". 
-  - You can then set the mode from `[QP1, QP2, QCQP]` to specify which method you want to call. 
-- `SecondOrder` denotes the prediction-correction method discussed in the appendix of "Safe Gradient Flow for Bilevel Optimization".
+CUDA is optional. The code uses a GPU automatically when PyTorch detects one; otherwise it runs on CPU. The default QCQP implementation used in the experiments is closed form. If you enable the CVXPY/MOSEK branch in `utilities.py`, you will also need a working MOSEK installation and license.
 
-You can also choose from the following problems:
-- `toy_example` and `toy_example_nc` denote the convex and nonconvex synthetic examples, respectively.
-- `toy_CS` denotes the small-scale coreset selection problem.
-- `DHC` denotes the small scale data hyper cleaning (DHC) problem, and `DHC_LS` denotes the large scale DHC.
-- `NN` denotes the DHC problem with a neural network classifier.
+## Quick Start
 
-The `BilevelSolver` class in `bilevel_solver.py` containts the implementations of our methods, and the state-of-the-art methods that we comapre with. You can also find the code for calculating the function definitions for `f()` and `g()`, and their derivatives in the same file. 
+Run the default script:
 
-You can modify the configurations based on your experiment. To add experiment with new parameters or method, you can change the `scenario_setup()` function in `setup.py`. Note that some hyperparameters (e.g., the step sizes) might have to be fine tuned to result in the best performance of the methods if the setup is changed.
+```bash
+bash run.sh
+```
 
-The resulting plots will be in the following form:
+You can also run experiments directly:
 
-<img src="Result/readme/sample.png" alt="Bilevel Optimization Diagram" width="800">
+```bash
+python3 main.py --testID 0 --scenarioID 4
+python3 main.py --testID 0 --scenarioID 5
+python3 main.py --testID 4 --scenarioID 8 --plot_std --num_average 5
+```
 
+`main.py` is the main entry point. `--testID` selects the problem setup. `--scenarioID` selects a method comparison and hyperparameter configuration from `scenario_setup()` in `setup.py`; inspect that function to choose an existing scenario or add a new one.
+
+## Problems
+
+| `testID` | Problem |
+|---:|---|
+| 0 | Convex synthetic example (`toy_example`) |
+| 1 | Nonconvex synthetic example (`toy_example_nc`) |
+| 2 | Constrained synthetic example (`toy_example_cons`) |
+| 3 | Small-scale coreset selection (`toy_CS`) |
+| 4 | Data hyper-cleaning with PCA (`DHC`) |
+| 5 | Large-scale data hyper-cleaning (`DHC_LS`) |
+| 6 | Data hyper-cleaning with a neural network classifier (`NN`) |
+
+## Methods
+
+- `IFCT`: continuous-time method from "Safe Gradient Flow for Bilevel Optimization".
+- `IFDT`: discrete-time method from "Sequential QCQP for Bilevel Optimization with Line Search" and "Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization". Modes include `QP1`, `QP2`, and `QCQP`.
+- `SecondOrder`: prediction-correction method discussed in the appendix of "Safe Gradient Flow for Bilevel Optimization".
+
+The `BilevelSolver` class in `bilevel_solver.py` contains the method implementations. Problem definitions and experiment configurations are in `setup.py`.
+
+## Outputs
+
+Raw result arrays are written to:
+
+```text
+Result/<experiment>/data/*.npy
+```
+
+Generated plots are written to:
+
+```text
+Result/<experiment>/*.pdf
+```
+
+The resulting plots have the following form:
+
+<img src="readme/sample.png" alt="Bilevel Optimization Plot" width="800">
 
 ## Citation
-If you use this code in your work or found this repository usefull, please cite our papers:
+
+If you use this code in your work, please cite our papers:
 
 ```bibtex
-@article{sharifi2025safe,
-  title={Safe Gradient Flow for Bilevel Optimization},
+@inproceedings{sharifi2025safe,
+  title={Safe gradient flow for bilevel optimization},
   author={Sharifi, Sina and Abolfazli, Nazanin and Hamedani, Erfan Yazdandoost and Fazlyab, Mahyar},
-  journal={arXiv preprint arXiv:2501.16520},
-  year={2025}
+  booktitle={2025 American Control Conference (ACC)},
+  pages={1675--1680},
+  year={2025},
+  organization={IEEE}
+}
+
+@article{sharifi2025sequential,
+  title={Sequential QCQP for Bilevel Optimization with Line Search},
+  author={Sharifi, Sina and Hamedani, Erfan Yazdandoost and Fazlyab, Mahyar},
+  journal={IEEE Control Systems Letters},
+  year={2025},
+  publisher={IEEE}
 }
 
 @article{abolfazli2025perturbed,
   title={Perturbed gradient descent via convex quadratic approximation for nonconvex bilevel optimization},
   author={Abolfazli, Nazanin and Sharifi, Sina and Fazlyab, Mahyar and Hamedani, Erfan Yazdandoost},
   journal={arXiv preprint arXiv:2504.17215},
-  year={2025}
-}
-
-@article{sharifi2025sequential,
-  title={Sequential QCQP for Bilevel Optimization with Line Search},
-  author={Sharifi, Sina and Hamedani, Erfan Yazdandoost and Fazlyab, Mahyar},
-  journal={arXiv preprint arXiv:2505.14647},
   year={2025}
 }
 ```
