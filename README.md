@@ -72,6 +72,10 @@ The resulting plots have the following form:
 
 <img src="readme/sample.png" alt="Bilevel Optimization Plot" width="800">
 
+## Aknowledgement
+
+This material is based upon work supported by the U.S. National Science Foundation under Grant Number 2515978.
+
 ## Citation
 
 If you use this code in your work, please cite our papers:
